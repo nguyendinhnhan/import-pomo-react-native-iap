@@ -1,9 +1,9 @@
 # ![image](https://user-images.githubusercontent.com/27461460/75094417-20321b00-55ce-11ea-8de7-a1df42a4b7df.png)
 
 [![runs with expo](https://img.shields.io/badge/Runs%20with%20Expo-000.svg?style=flat&logo=EXPO&labelColor=ffffff&logoColor=000)](https://github.com/expo/expo)
-[![Version](http://img.shields.io/npm/v/react-native-iap.svg?style=flat-square)](https://npmjs.org/package/expo-iap)
+[![Version](http://img.shields.io/npm/v/expo-iap.svg?style=flat-square)](https://npmjs.org/package/expo-iap)
 <!-- [![Next](https://img.shields.io/npm/v/react-native-iap/next.svg?style=flat-square)](https://npmjs.org/package/react-native-iap) -->
-[![Download](http://img.shields.io/npm/dm/react-native-iap.svg?style=flat-square)](https://npmjs.org/package/expo-iap)
+[![Download](http://img.shields.io/npm/dm/expo-iap.svg?style=flat-square)](https://npmjs.org/package/expo-iap)
 [![CI](https://github.com/dooboolab/react-native-iap/actions/workflows/ci.yml/badge.svg)](https://github.com/dooboolab/react-native-iap/actions/workflows/ci.yml)
 [![document](https://github.com/dooboolab/react-native-iap/actions/workflows/deploy-document.yml/badge.svg)](https://github.com/dooboolab/react-native-iap/actions/workflows/deploy-document.yml)
 [![License](https://img.shields.io/npm/l/react-native-iap.svg)](https://npmjs.org/package/expo-iap)
