@@ -1,0 +1,13 @@
+{
+  "name": "react-native-iap",
+  "platforms": [
+    "ios",
+    "android"
+  ],
+  "ios": {
+    "modulesClassNames": ["RNIapIos"]
+  },
+  "android": {
+    "modulesClassNames": ["com.dooboolab.RNIap"]
+  }
+}

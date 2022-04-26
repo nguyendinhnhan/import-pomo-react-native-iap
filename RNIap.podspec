@@ -14,5 +14,5 @@ Pod::Spec.new do |s|
   s.swift_version = "4.2"
   s.requires_arc  = true
 
-  s.dependency 'React-Core'
+  s.dependency 'ExpoModulesCore'
 end
