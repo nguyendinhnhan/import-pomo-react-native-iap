@@ -1,5 +1,5 @@
 {
-  "name": "react-native-iap",
+  "name": "expo-iap",
   "platforms": [
     "ios",
     "android"
