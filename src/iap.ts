@@ -6,7 +6,6 @@ import {
   EmitterSubscription,
   Linking,
   NativeEventEmitter,
-  NativeModules,
   Platform,
 } from 'react-native';
 import {
@@ -24,7 +23,9 @@ import {
   SubscriptionPurchase,
 } from './types';
 
-const {RNIapIos, RNIapModule, RNIapAmazonModule} = NativeModules;
+import {NativeModulesProxy} from 'expo-modules-core';
+
+const {RNIapIos, RNIapModule, RNIapAmazonModule} = NativeModulesProxy;
 
 const ANDROID_ITEM_TYPE_SUBSCRIPTION = 'subs';
 const ANDROID_ITEM_TYPE_IAP = 'inapp';

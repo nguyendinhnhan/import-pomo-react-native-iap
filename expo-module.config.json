@@ -1,5 +1,4 @@
 {
-  "name": "expo-iap",
   "platforms": [
     "ios",
     "android"
@@ -8,6 +7,6 @@
     "modulesClassNames": ["RNIapIos"]
   },
   "android": {
-    "modulesClassNames": ["com.dooboolab.RNIap"]
+    "modulesClassNames": ["com.dooboolab.RNIap.RNIapModule"]
   }
 }

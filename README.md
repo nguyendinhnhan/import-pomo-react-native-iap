@@ -19,11 +19,13 @@
 
 This package is forked from [react-native-iap](https://github.com/dooboolab/react-native-iap) which runs in `expo` environment. This also works in managed workflow.
 
+This is highly experimental 🚧. We've tested this on `Android` and it called the module successfully. However this currently is experiencing [Native module cannot be null issue](https://github.com/expo/expo/issues/11786).
+
 
 ## Installation
 
 ```
-yarn add expo-iap
+expo install expo-iap
 ```
 
 ## Documentation

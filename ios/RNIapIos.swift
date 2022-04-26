@@ -4,6 +4,7 @@
 //
 //  Created by Andres Aguilar on 9/8/21.
 //
+import ExpoModulesCore
 import React
 import StoreKit
 
@@ -29,7 +30,7 @@ extension SKProductsRequest {
 }
 typealias IapPromise = (RCTPromiseResolveBlock,RCTPromiseRejectBlock)
 @objc(RNIapIos)
-class RNIapIos: RCTEventEmitter, SKRequestDelegate, SKPaymentTransactionObserver, SKProductsRequestDelegate {
+public class RNIapIos: RCTEventEmitter, SKRequestDelegate, SKPaymentTransactionObserver, SKProductsRequestDelegate, Module {
     private var promisesByKey: [String: [IapPromise]]
     private var myQueue: DispatchQueue
     private var hasListeners = false
@@ -40,7 +41,11 @@ class RNIapIos: RCTEventEmitter, SKRequestDelegate, SKPaymentTransactionObserver
     private var promotedProduct: SKProduct? = nil
     private var productsRequest: SKProductsRequest? = nil
     private var countPendingTransaction: Int?
-    
+
+    public func definition() -> ModuleDefinition {
+        name("RNIap")
+    }
+
     override init() {
         promisesByKey = [String : [IapPromise]]()
         pendingTransactionWithAutoFinish = false
@@ -48,7 +53,7 @@ class RNIapIos: RCTEventEmitter, SKRequestDelegate, SKPaymentTransactionObserver
         validProducts = [SKProduct]()
         super.init()
     }
-    
+
     deinit {
         SKPaymentQueue.default().remove(self)
     }
@@ -56,7 +61,7 @@ class RNIapIos: RCTEventEmitter, SKRequestDelegate, SKPaymentTransactionObserver
     override class func requiresMainQueueSetup() -> Bool {
         return true
     }
-    
+
     func flushUnheardEvents() {
         paymentQueue(SKPaymentQueue.default(), updatedTransactions: SKPaymentQueue.default().transactions)
     }
