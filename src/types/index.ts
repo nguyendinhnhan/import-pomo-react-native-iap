@@ -45,7 +45,7 @@ export interface ProductCommon {
   price: string;
   currency: string;
   localizedPrice: string;
-  localizedPrice12: string;
+  localizedPrice12: string; // Add localizedPrice12 by Nyan
   countryCode?: string;
 }
 

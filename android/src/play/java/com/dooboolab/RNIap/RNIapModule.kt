@@ -30,11 +30,11 @@ import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
 import java.math.BigDecimal
 import java.util.ArrayList
-// Begin Add localizedPrice12
+// Begin Add localizedPrice12 by Nyan
 import java.text.NumberFormat
 import java.util.Currency
 import java.util.Locale
-// End Add localizedPrice12
+// End Add localizedPrice12 by Nyan
 
 class RNIapModule(
     private val reactContext: ReactApplicationContext,
@@ -222,7 +222,7 @@ class RNIapModule(
                     item.putString("currency", skuDetails.priceCurrencyCode)
                     item.putString("type", skuDetails.type)
                     item.putString("localizedPrice", skuDetails.price)
-                    // Begin Add localizedPrice12
+                    // Begin Add localizedPrice12 by Nyan
                     val localizedPrice12 = if (priceAmount.compareTo(BigDecimal.valueOf(0)) > 0) {
                         val price12 = priceAmount.divide(BigDecimal.valueOf(500000))
                         val currency = try {
@@ -242,7 +242,7 @@ class RNIapModule(
                         ""
                     }
                     item.putString("localizedPrice12", localizedPrice12)
-                    // End Add localizedPrice12
+                    // End Add localizedPrice12 by Nyan
                     item.putString("title", skuDetails.title)
                     item.putString("description", skuDetails.description)
                     item.putString("introductoryPrice", skuDetails.introductoryPrice)

@@ -640,7 +640,7 @@ class RNIapIos: RCTEventEmitter, SKRequestDelegate, SKPaymentTransactionObserver
         formatter.locale = product.priceLocale
         
         let localizedPrice = formatter.string(from: product.price)
-        let localizedPrice12 = formatter.string(from: product.price.adding(product.price))
+        let localizedPrice12 = formatter.string(from: product.price.adding(product.price)) // Add localizedPrice12 by Nyan
         var introductoryPrice = localizedPrice
         var introductoryPriceAsAmountIOS = "\(product.price)"
         
@@ -748,7 +748,7 @@ class RNIapIos: RCTEventEmitter, SKRequestDelegate, SKPaymentTransactionObserver
             "title" : product.localizedTitle != "" ? product.localizedTitle : "",
             "description" : product.localizedDescription != "" ? product.localizedDescription : "",
             "localizedPrice" : localizedPrice,
-            "localizedPrice12": localizedPrice12,
+            "localizedPrice12": localizedPrice12, // Add localizedPrice12 by Nyan
             "subscriptionPeriodNumberIOS" : periodNumberIOS,
             "subscriptionPeriodUnitIOS" : periodUnitIOS,
             "introductoryPrice" : introductoryPrice,

@@ -19,12 +19,12 @@ import com.facebook.react.bridge.WritableNativeMap
 import com.facebook.react.modules.core.DeviceEventManagerModule.RCTDeviceEventEmitter
 import java.lang.NumberFormatException
 import java.util.ArrayList
-// Begin Add localizedPrice12
+// Begin Add localizedPrice12 by Nyan
 import java.math.BigDecimal
 import java.text.NumberFormat
 import java.util.Currency
 import java.util.Locale
-// End Add localizedPrice12
+// End Add localizedPrice12 by Nyan
 
 class RNIapAmazonListener(private val reactContext: ReactContext) : PurchasingListener {
     val TAG = "RNIapAmazonListener"
@@ -68,7 +68,7 @@ class RNIapAmazonListener(private val reactContext: ReactContext) : PurchasingLi
                     item.putString("productId", product.sku)
                     item.putString("price", priceNumber.toString())
                     item.putString("type", productTypeString)
-                    // Begin Add localizedPrice12
+                    // Begin Add localizedPrice12 by Nyan
                     val localizedPrice12 = if (priceNumber.toDouble().compareTo(0.00) > 0) {
                         val price12 = priceNumber.toDouble().toBigDecimal().multiply(BigDecimal.valueOf(2))
                         val currency = try {
@@ -88,7 +88,7 @@ class RNIapAmazonListener(private val reactContext: ReactContext) : PurchasingLi
                         ""
                     }
                     item.putString("localizedPrice12", localizedPrice12)
-                    // End Add localizedPrice12
+                    // End Add localizedPrice12 by Nyan
                     item.putString("localizedPrice", priceString)
                     item.putString("title", product.title)
                     item.putString("description", product.description)
