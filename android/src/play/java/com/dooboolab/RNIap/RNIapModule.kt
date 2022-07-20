@@ -47,7 +47,7 @@ class RNIapModule(
     private var billingClient: BillingClient = builder.setListener(this).build()
     private val skus: MutableMap<String, SkuDetails> = mutableMapOf()
     override fun getName(): String {
-        return "RNIapModule"
+        return TAG
     }
 
     internal fun ensureConnection(promise: Promise, callback: () -> Unit) {
@@ -633,9 +633,8 @@ class RNIapModule(
         // Keep: Required for RN built-in Event Emitter Calls.
     }
 
-    @get:ReactMethod
-    val packageName: String
-        get() = reactApplicationContext.packageName
+    @ReactMethod
+    fun getPackageName(promise: Promise) = promise.resolve(reactApplicationContext.packageName)
 
     private fun sendEvent(
         reactContext: ReactContext,
