@@ -81,6 +81,7 @@ export const subscriptionSk2Map = ({
     type: 'subs',
     price: String(price),
     localizedPrice: displayPrice,
+    localizedPrice12: String(price*2),
     currency: '', // Not avaiable on new API, use localizedPrice instead
     subscriptionPeriodNumberIOS: `${subscription?.subscriptionPeriod?.value}`,
     subscriptionPeriodUnitIOS:
