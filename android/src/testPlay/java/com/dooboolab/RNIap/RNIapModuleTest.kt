@@ -4,13 +4,15 @@ import com.android.billingclient.api.BillingClient
 import com.android.billingclient.api.BillingClientStateListener
 import com.android.billingclient.api.BillingResult
 import com.android.billingclient.api.ConsumeResponseListener
+import com.android.billingclient.api.ProductDetailsResponseListener
 import com.android.billingclient.api.Purchase
 import com.android.billingclient.api.PurchasesResponseListener
-import com.android.billingclient.api.SkuDetailsResponseListener
+import com.android.billingclient.api.QueryPurchasesParams
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReadableArray
+import com.facebook.react.bridge.ReadableType
 import com.facebook.react.bridge.WritableArray
 import com.facebook.react.bridge.WritableMap
 import com.google.android.gms.common.ConnectionResult
@@ -55,9 +57,13 @@ class RNIapModuleTest {
 
     @Test
     fun `initConnection Already connected should resolve to true`() {
-        every { billingClient.isReady } returns true
-        val promise = mockk<Promise>(relaxed = true)
+        every { availability.isGooglePlayServicesAvailable(any()) } returns ConnectionResult.SUCCESS
+        module.initConnection(mockk())
 
+        every { billingClient.isReady } returns true
+
+        val promise = mockk<Promise>(relaxed = true)
+        // Already connected
         module.initConnection(promise)
         verify(exactly = 0) { promise.reject(any(), any<String>()) }
         verify { promise.resolve(true) }
@@ -112,8 +118,10 @@ class RNIapModuleTest {
 
     @Test
     fun `endConnection resolves`() {
+        every { availability.isGooglePlayServicesAvailable(any()) } returns ConnectionResult.SUCCESS
         val promise = mockk<Promise>(relaxed = true)
 
+        module.initConnection(mockk())
         module.endConnection(promise)
 
         verify { billingClient.endConnection() }
@@ -123,12 +131,14 @@ class RNIapModuleTest {
 
     @Test
     fun `flushFailedPurchasesCachedAsPending resolves to false if no pending purchases`() {
+        every { availability.isGooglePlayServicesAvailable(any()) } returns ConnectionResult.SUCCESS
         every { billingClient.isReady } returns true
         val promise = mockk<Promise>(relaxed = true)
         val listener = slot<PurchasesResponseListener>()
-        every { billingClient.queryPurchasesAsync(any(), capture(listener)) } answers {
+        every { billingClient.queryPurchasesAsync(any<QueryPurchasesParams>(), capture(listener)) } answers {
             listener.captured.onQueryPurchasesResponse(BillingResult.newBuilder().build(), listOf())
         }
+        module.initConnection(mockk())
         module.flushFailedPurchasesCachedAsPending(promise)
 
         verify(exactly = 0) { promise.reject(any(), any<String>()) }
@@ -137,10 +147,11 @@ class RNIapModuleTest {
 
     @Test
     fun `flushFailedPurchasesCachedAsPending resolves to true if pending purchases`() {
+        every { availability.isGooglePlayServicesAvailable(any()) } returns ConnectionResult.SUCCESS
         every { billingClient.isReady } returns true
         val promise = mockk<Promise>(relaxed = true)
         val listener = slot<PurchasesResponseListener>()
-        every { billingClient.queryPurchasesAsync(any(), capture(listener)) } answers {
+        every { billingClient.queryPurchasesAsync(any<QueryPurchasesParams>(), capture(listener)) } answers {
             listener.captured.onQueryPurchasesResponse(
                 BillingResult.newBuilder().build(),
                 listOf(
@@ -161,7 +172,7 @@ class RNIapModuleTest {
                 ""
             )
         }
-
+        module.initConnection(mockk())
         module.flushFailedPurchasesCachedAsPending(promise)
 
         verify(exactly = 0) { promise.reject(any(), any<String>()) }
@@ -173,12 +184,20 @@ class RNIapModuleTest {
         every { availability.isGooglePlayServicesAvailable(any()) } returns ConnectionResult.SUCCESS
         val promise = mockk<Promise>(relaxed = true)
         var isCallbackCalled = false
-        val callback = {
+        val callback = { _: BillingClient ->
             isCallbackCalled = true
             promise.resolve(true)
         }
 
-        every { billingClient.isReady } returns false andThen true
+        every { billingClient.isReady } returns true
+        val listener = slot<BillingClientStateListener>()
+        every { billingClient.startConnection(capture(listener)) } answers {
+            listener.captured.onBillingSetupFinished(
+                BillingResult.newBuilder().setResponseCode(BillingClient.BillingResponseCode.OK)
+                    .build()
+            )
+        }
+
         module.ensureConnection(promise, callback)
         verify { promise.resolve(true) } // at least one pending transactions
         assertTrue("Should call callback", isCallbackCalled)
@@ -186,32 +205,45 @@ class RNIapModuleTest {
 
     @Test
     fun getItemsByType() {
+        every { availability.isGooglePlayServicesAvailable(any()) } returns ConnectionResult.SUCCESS
         every { billingClient.isReady } returns true
         val promise = mockk<Promise>(relaxed = true)
-        val listener = slot<SkuDetailsResponseListener>()
-        every { billingClient.querySkuDetailsAsync(any(), capture(listener)) } answers {
-            listener.captured.onSkuDetailsResponse(
+        val listener = slot<ProductDetailsResponseListener>()
+        every { billingClient.queryProductDetailsAsync(any(), capture(listener)) } answers {
+            listener.captured.onProductDetailsResponse(
                 BillingResult.newBuilder().build(),
                 listOf(
                     mockk {
-                        every { sku } returns "sku1"
-                        every { introductoryPriceAmountMicros } returns 0
-                        every { priceAmountMicros } returns 1
-                        every { priceCurrencyCode } returns "USD"
-                        every { type } returns "sub"
-                        every { price } returns "$10.0"
-                        every { title } returns "My product"
-                        every { description } returns "My desc"
-                        every { introductoryPrice } returns "$5.0"
-                        every { zzc() } returns "com.mypackage"
-                        every { originalPrice } returns "$13.0"
-                        every { subscriptionPeriod } returns "3 months"
-                        every { freeTrialPeriod } returns "1 week"
-                        every { introductoryPriceCycles } returns 1
-                        every { introductoryPricePeriod } returns "1"
-                        every { iconUrl } returns "http://myicon.com/icon"
-                        every { originalJson } returns "{}"
-                        every { originalPriceAmountMicros } returns 2
+                        every { productId } returns "sku1"
+
+                        every { title } returns "title2"
+                        every { description } returns "My product"
+
+                        every { productType } returns "sub"
+                        every { name } returns "name of product"
+                        every { oneTimePurchaseOfferDetails } returns mockk {
+                            every { priceCurrencyCode } returns "my code"
+                            every { formattedPrice } returns "$20.00"
+                            every { priceAmountMicros } returns 20000
+                        }
+                        every { subscriptionOfferDetails } returns listOf(
+                            mockk {
+                                every { offerToken } returns "sToken"
+                                every { offerTags } returns listOf("offerTag1", "offerTag2")
+                                every { pricingPhases } returns mockk {
+                                    every { pricingPhaseList } returns listOf(
+                                        mockk {
+                                            every { formattedPrice } returns "$13.0"
+                                            every { priceCurrencyCode } returns "USD"
+                                            every { billingPeriod } returns "1 week"
+                                            every { billingCycleCount } returns 1
+                                            every { priceAmountMicros } returns 13000
+                                            every { recurrenceMode } returns 2
+                                        }
+                                    )
+                                }
+                            }
+                        )
                     }
                 )
             )
@@ -219,22 +251,25 @@ class RNIapModuleTest {
         val skus = mockk<ReadableArray>() {
             every { size() } returns 1
             every { getString(0) } returns "sku0"
+            every { getType(0) } returns ReadableType.String
         }
         mockkStatic(Arguments::class)
 
-        val itemsMap = mockk<WritableMap>()
-        val itemsArr = mockk<WritableArray>()
+        val itemsMap = mockk<WritableMap>(relaxed = true)
+        var itemsSize = 0
+        val itemsArr = mockk<WritableArray> {
+            every { pushString(any()) } just runs
+            every { pushMap(any()) } answers {
+                itemsSize++
+            }
+        }
         every { Arguments.createMap() } returns itemsMap
         every { Arguments.createArray() } returns itemsArr
-        every { itemsMap.putString(any(), any()) } just runs
-        var itemsSize = 0
-        every { itemsArr.pushMap(any()) } answers {
-            itemsSize++
-        }
 
+        module.initConnection(mockk())
         module.getItemsByType("subs", skus, promise)
         verify { promise.resolve(any()) }
-        assertEquals(itemsSize, 1)
+        assertEquals(3, itemsSize)
     }
 
     @Test

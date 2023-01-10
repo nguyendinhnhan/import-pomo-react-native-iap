@@ -1,27 +1,20 @@
-export enum IAPErrorCode {
-  E_IAP_NOT_AVAILABLE = 'E_IAP_NOT_AVAILABLE',
-  E_UNKNOWN = 'E_UNKNOWN',
-  E_USER_CANCELLED = 'E_USER_CANCELLED',
-  E_USER_ERROR = 'E_USER_ERROR',
-  E_ITEM_UNAVAILABLE = 'E_ITEM_UNAVAILABLE',
-  E_REMOTE_ERROR = 'E_REMOTE_ERROR',
-  E_NETWORK_ERROR = 'E_NETWORK_ERROR',
-  E_SERVICE_ERROR = 'E_SERVICE_ERROR',
-  E_RECEIPT_FAILED = 'E_RECEIPT_FAILED',
-  E_RECEIPT_FINISHED_FAILED = 'E_RECEIPT_FINISHED_FAILED',
-  E_NOT_PREPARED = 'E_NOT_PREPARED',
-  E_NOT_ENDED = 'E_NOT_ENDED',
-  E_ALREADY_OWNED = 'E_ALREADY_OWNED',
-  E_DEVELOPER_ERROR = 'E_DEVELOPER_ERROR',
-  E_BILLING_RESPONSE_JSON_PARSE_ERROR = 'E_BILLING_RESPONSE_JSON_PARSE_ERROR',
-  E_DEFERRED_PAYMENT = 'E_DEFERRED_PAYMENT',
-}
+import type {
+  AmazonModuleProps,
+  AndroidModuleProps,
+  IosModuleProps,
+} from '../modules';
+import type {IosModulePropsSk2} from '../modules/iosSk2';
+
+import type * as Apple from './apple';
+
+export type Sku = string;
 
 export enum ProrationModesAndroid {
   IMMEDIATE_WITH_TIME_PRORATION = 1,
   IMMEDIATE_AND_CHARGE_PRORATED_PRICE = 2,
   IMMEDIATE_WITHOUT_PRORATION = 3,
   DEFERRED = 4,
+  IMMEDIATE_AND_CHARGE_FULL_PRICE = 5,
   UNKNOWN_SUBSCRIPTION_UPGRADE_DOWNGRADE_POLICY = 0,
 }
 
@@ -39,7 +32,24 @@ export enum InstallSourceAndroid {
   AMAZON = 2,
 }
 
+export enum ProductType {
+  /** Subscription */
+  subs = 'subs',
+
+  /** Subscription */
+  sub = 'sub',
+
+  /** Consumable */
+  inapp = 'inapp',
+
+  /** Consumable */
+  iap = 'iap',
+}
+
 export interface ProductCommon {
+  type: 'subs' | 'sub' | 'inapp' | 'iap';
+  productId: string; //iOS
+  productIds?: string[];
   title: string;
   description: string;
   price: string;
@@ -57,9 +67,10 @@ export interface ProductPurchase {
   purchaseToken?: string;
   //iOS
   quantityIOS?: number;
-  originalTransactionDateIOS?: string;
+  originalTransactionDateIOS?: number;
   originalTransactionIdentifierIOS?: string;
   //Android
+  productIds?: string[];
   dataAndroid?: string;
   signatureAndroid?: string;
   autoRenewingAndroid?: boolean;
@@ -81,25 +92,16 @@ export interface PurchaseResult {
   debugMessage?: string;
   code?: string;
   message?: string;
+  purchaseToken?: string;
 }
-
-export interface PurchaseError {
-  responseCode?: number;
-  debugMessage?: string;
-  code?: string;
-  message?: string;
-  productId?: string;
-}
-
-export type InAppPurchase = ProductPurchase;
 
 export interface SubscriptionPurchase extends ProductPurchase {
   autoRenewingAndroid?: boolean;
-  originalTransactionDateIOS?: string;
+  originalTransactionDateIOS?: number;
   originalTransactionIdentifierIOS?: string;
 }
 
-export type Purchase = InAppPurchase | SubscriptionPurchase;
+export type Purchase = ProductPurchase | SubscriptionPurchase;
 
 export interface Discount {
   identifier: string;
@@ -111,17 +113,78 @@ export interface Discount {
   subscriptionPeriod: string;
 }
 
-export interface Product extends ProductCommon {
+export interface ProductAndroid extends ProductCommon {
   type: 'inapp' | 'iap';
-  productId: string;
+  oneTimePurchaseOfferDetails?: {
+    priceCurrencyCode: string;
+    formattedPrice: string;
+    priceAmountMicros: string;
+  };
+}
+export interface ProductIOS extends ProductCommon {
+  type: 'inapp' | 'iap';
 }
 
-export interface Subscription extends ProductCommon {
-  type: 'subs' | 'sub';
+export type Product = ProductAndroid & ProductIOS;
+
+/**
+ * Can be used to distinguish the different platforms' subscription information
+ */
+export enum SubscriptionPlatform {
+  android = 'android',
+  amazon = 'amazon',
+  ios = 'ios',
+}
+
+/** Android Billing v5 type */
+export interface SubscriptionAndroid {
+  platform: SubscriptionPlatform.android;
+  productType: 'subs';
+  name: string;
+  title: string;
+  description: string;
   productId: string;
+  subscriptionOfferDetails: SubscriptionOfferAndroid[];
+}
 
+export interface SubscriptionOfferAndroid {
+  offerToken: string;
+  pricingPhases: {
+    pricingPhaseList: PricingPhaseAndroid[];
+  };
+  offerTags: string[];
+}
+
+export interface PricingPhaseAndroid {
+  formattedPrice: string;
+  localizedPrice12: string; // Add localizedPrice12 by Nyan
+  priceCurrencyCode: string;
+  /**
+   * P1W, P1M, P1Y
+   */
+  billingPeriod: string;
+  billingCycleCount: number;
+  priceAmountMicros: string;
+  recurrenceMode: number;
+}
+
+/**
+ * TODO: As of 2022-10-10, this typing is not verified against the real
+ * Amazon API. Please update this if you have a more accurate type.
+ */
+export interface SubscriptionAmazon extends ProductCommon {
+  platform: SubscriptionPlatform.amazon;
+  type: 'subs';
+
+  productType?: string;
+  name?: string;
+}
+
+export type SubscriptionIosPeriod = 'DAY' | 'WEEK' | 'MONTH' | 'YEAR' | '';
+export interface SubscriptionIOS extends ProductCommon {
+  platform: SubscriptionPlatform.ios;
+  type: 'subs';
   discounts?: Discount[];
-
   introductoryPrice?: string;
   introductoryPriceAsAmountIOS?: string;
   introductoryPricePaymentModeIOS?:
@@ -130,19 +193,76 @@ export interface Subscription extends ProductCommon {
     | 'PAYASYOUGO'
     | 'PAYUPFRONT';
   introductoryPriceNumberOfPeriodsIOS?: string;
-  introductoryPriceSubscriptionPeriodIOS?:
-    | 'DAY'
-    | 'WEEK'
-    | 'MONTH'
-    | 'YEAR'
-    | '';
+  introductoryPriceSubscriptionPeriodIOS?: SubscriptionIosPeriod;
 
   subscriptionPeriodNumberIOS?: string;
-  subscriptionPeriodUnitIOS?: '' | 'YEAR' | 'MONTH' | 'WEEK' | 'DAY';
+  subscriptionPeriodUnitIOS?: SubscriptionIosPeriod;
+}
 
-  introductoryPriceAsAmountAndroid: string;
-  introductoryPriceCyclesAndroid?: string;
-  introductoryPricePeriodAndroid?: string;
-  subscriptionPeriodAndroid?: string;
-  freeTrialPeriodAndroid?: string;
+export type Subscription =
+  | SubscriptionAndroid
+  | SubscriptionAmazon
+  | SubscriptionIOS;
+
+export interface RequestPurchaseBaseAndroid {
+  obfuscatedAccountIdAndroid?: string;
+  obfuscatedProfileIdAndroid?: string;
+  isOfferPersonalized?: boolean; // For AndroidBilling V5 https://developer.android.com/google/play/billing/integrate#personalized-price
+}
+
+export interface RequestPurchaseAndroid extends RequestPurchaseBaseAndroid {
+  skus: Sku[];
+}
+
+export interface RequestPurchaseIOS {
+  sku: Sku;
+  andDangerouslyFinishTransactionAutomaticallyIOS?: boolean;
+  /**
+   * UUID representing user account
+   */
+  appAccountToken?: string;
+  quantity?: number;
+  withOffer?: Apple.PaymentDiscount;
+}
+
+/** As of 2022-10-12, we only use the `sku` field for Amazon purchases */
+export type RequestPurchaseAmazon = RequestPurchaseIOS;
+
+export type RequestPurchase =
+  | RequestPurchaseAndroid
+  | RequestPurchaseAmazon
+  | RequestPurchaseIOS;
+
+/**
+ * In order to purchase a new subscription, every sku must have a selected offerToken
+ * @see SubscriptionAndroid.subscriptionOfferDetails.offerToken
+ */
+export interface SubscriptionOffer {
+  sku: Sku;
+  offerToken: string;
+}
+
+export interface RequestSubscriptionAndroid extends RequestPurchaseBaseAndroid {
+  purchaseTokenAndroid?: string;
+  prorationModeAndroid?: ProrationModesAndroid;
+  subscriptionOffers: SubscriptionOffer[];
+}
+
+export type RequestSubscriptionIOS = RequestPurchaseIOS;
+
+/** As of 2022-10-12, we only use the `sku` field for Amazon subscriptions */
+export type RequestSubscriptionAmazon = RequestSubscriptionIOS;
+
+export type RequestSubscription =
+  | RequestSubscriptionAndroid
+  | RequestSubscriptionAmazon
+  | RequestSubscriptionIOS;
+
+declare module 'react-native' {
+  interface NativeModulesStatic {
+    RNIapIos: IosModuleProps;
+    RNIapIosSk2: IosModulePropsSk2;
+    RNIapModule: AndroidModuleProps;
+    RNIapAmazonModule: AmazonModuleProps;
+  }
 }

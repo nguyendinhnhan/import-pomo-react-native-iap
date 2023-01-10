@@ -1,3 +1,12 @@
+export interface UserDataAmazon {
+  userIdAmazon?: string;
+  userMarketplaceAmazon?: string;
+  userJsonAmazon?: string;
+}
+
+export interface ProductPurchaseAmazon extends UserDataAmazon {
+  isCanceledAmazon?: boolean;
+}
 /**
  * From: https://developer.amazon.com/es/docs/in-app-purchasing/iap-rvs-examples.html
  */
@@ -21,3 +30,11 @@ export type ReceiptType = {
   termSku: string;
   testTransaction: boolean;
 } & Record<string, unknown>;
+
+export type AmazonLicensingStatus =
+  | 'LICENSED'
+  | 'NOT_LICENSED'
+  | 'EXPIRED'
+  | 'ERROR_VERIFICATION'
+  | 'ERROR_INVALID_LICENSING_KEYS'
+  | 'UNKNOWN_ERROR';

@@ -1,14 +1,17 @@
-import type {Product, Purchase, PurchaseError, Subscription} from '../types';
+import {useCallback} from 'react';
+
 import {
-  getPurchaseHistory,
   finishTransaction as iapFinishTransaction,
   getAvailablePurchases as iapGetAvailablePurchases,
   getProducts as iapGetProducts,
+  getPurchaseHistory as iapGetPurchaseHistory,
   getSubscriptions as iapGetSubscriptions,
   requestPurchase as iapRequestPurchase,
   requestSubscription as iapRequestSubscription,
 } from '../iap';
-import {useCallback} from 'react';
+import type {PurchaseError} from '../purchaseError';
+import type {Product, Purchase, PurchaseResult, Subscription} from '../types';
+
 import {useIAPContext} from './withIAPContext';
 
 type IAP_STATUS = {
@@ -16,51 +19,57 @@ type IAP_STATUS = {
   products: Product[];
   promotedProductsIOS: Product[];
   subscriptions: Subscription[];
-  purchaseHistories: Purchase[];
+  purchaseHistory: Purchase[];
   availablePurchases: Purchase[];
   currentPurchase?: Purchase;
   currentPurchaseError?: PurchaseError;
-  finishTransaction: (
-    purchase: Purchase,
-    isConsumable?: boolean,
-    developerPayloadAndroid?: string,
-  ) => Promise<string | void>;
+  initConnectionError?: Error;
+  finishTransaction: ({
+    purchase,
+    isConsumable,
+    developerPayloadAndroid,
+  }: {
+    purchase: Purchase;
+    isConsumable?: boolean;
+    developerPayloadAndroid?: string;
+  }) => Promise<string | boolean | PurchaseResult | void>;
   getAvailablePurchases: () => Promise<void>;
-  getPurchaseHistories: () => Promise<void>;
-  getProducts: (skus: string[]) => Promise<void>;
-  getSubscriptions: (skus: string[]) => Promise<void>;
+  getPurchaseHistory: () => Promise<void>;
+  getProducts: ({skus}: {skus: string[]}) => Promise<void>;
+  getSubscriptions: ({skus}: {skus: string[]}) => Promise<void>;
   requestPurchase: typeof iapRequestPurchase;
   requestSubscription: typeof iapRequestSubscription;
 };
 
-export function useIAP(): IAP_STATUS {
+export const useIAP = (): IAP_STATUS => {
   const {
     connected,
     products,
     promotedProductsIOS,
     subscriptions,
-    purchaseHistories,
+    purchaseHistory,
     availablePurchases,
     currentPurchase,
     currentPurchaseError,
+    initConnectionError,
     setProducts,
     setSubscriptions,
     setAvailablePurchases,
-    setPurchaseHistories,
+    setPurchaseHistory,
     setCurrentPurchase,
     setCurrentPurchaseError,
   } = useIAPContext();
 
   const getProducts = useCallback(
-    async (skus: string[]): Promise<void> => {
-      setProducts(await iapGetProducts(skus));
+    async ({skus}: {skus: string[]}): Promise<void> => {
+      setProducts(await iapGetProducts({skus}));
     },
     [setProducts],
   );
 
   const getSubscriptions = useCallback(
-    async (skus: string[]): Promise<void> => {
-      setSubscriptions(await iapGetSubscriptions(skus));
+    async ({skus}: {skus: string[]}): Promise<void> => {
+      setSubscriptions(await iapGetSubscriptions({skus}));
     },
     [setSubscriptions],
   );
@@ -69,22 +78,26 @@ export function useIAP(): IAP_STATUS {
     setAvailablePurchases(await iapGetAvailablePurchases());
   }, [setAvailablePurchases]);
 
-  const getPurchaseHistories = useCallback(async (): Promise<void> => {
-    setPurchaseHistories(await getPurchaseHistory());
-  }, [setPurchaseHistories]);
+  const getPurchaseHistory = useCallback(async (): Promise<void> => {
+    setPurchaseHistory(await iapGetPurchaseHistory());
+  }, [setPurchaseHistory]);
 
   const finishTransaction = useCallback(
-    async (
-      purchase: Purchase,
-      isConsumable?: boolean,
-      developerPayloadAndroid?: string,
-    ): Promise<string | void> => {
+    async ({
+      purchase,
+      isConsumable,
+      developerPayloadAndroid,
+    }: {
+      purchase: Purchase;
+      isConsumable?: boolean;
+      developerPayloadAndroid?: string;
+    }): Promise<string | boolean | PurchaseResult | void> => {
       try {
-        return await iapFinishTransaction(
+        return await iapFinishTransaction({
           purchase,
           isConsumable,
           developerPayloadAndroid,
-        );
+        });
       } catch (err) {
         throw err;
       } finally {
@@ -110,16 +123,17 @@ export function useIAP(): IAP_STATUS {
     products,
     promotedProductsIOS,
     subscriptions,
-    purchaseHistories,
+    purchaseHistory,
     availablePurchases,
     currentPurchase,
     currentPurchaseError,
+    initConnectionError,
     finishTransaction,
     getProducts,
     getSubscriptions,
     getAvailablePurchases,
-    getPurchaseHistories,
+    getPurchaseHistory,
     requestPurchase: iapRequestPurchase,
     requestSubscription: iapRequestSubscription,
   };
-}
+};

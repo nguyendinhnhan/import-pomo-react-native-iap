@@ -62,3 +62,8 @@ buck-out/
 /ios/Pods/
 /vendor/bundle/
 .yarn
+#used to point to local ios files
+!react-native.config.js
+
+# Amazon
+**/AppstoreAuthenticationKey.pem
