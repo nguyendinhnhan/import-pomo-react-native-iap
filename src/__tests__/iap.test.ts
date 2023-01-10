@@ -37,6 +37,7 @@ describe('Google Play IAP', () => {
                 billingPeriod: 'P1Y',
                 priceCurrencyCode: 'USD',
                 formattedPrice: '$49.99',
+                localizedPrice12: '$99.99',
               },
             ],
           },
