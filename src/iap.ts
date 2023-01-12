@@ -243,6 +243,7 @@ export const getSubscriptions = ({
     Platform.select({
       ios: async (): Promise<SubscriptionIOS[]> => {
         let items: SubscriptionIOS[];
+        /* Add localizedPrice12 by Nyan
         if (isIosStorekit2()) {
           items = ((await RNIapIosSk2.getItems(skus)) as ProductSk2[]).map(
             subscriptionSk2Map,
@@ -250,6 +251,8 @@ export const getSubscriptions = ({
         } else {
           items = (await RNIapIos.getItems(skus)) as SubscriptionIOS[];
         }
+        */
+        items = (await RNIapIos.getItems(skus)) as SubscriptionIOS[]; // Add localizedPrice12 by Nyan
 
         return addSubscriptionPlatform(items, SubscriptionPlatform.ios);
       },
