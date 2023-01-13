@@ -1,5 +1,10 @@
 package com.dooboolab.RNIap
 
+import java.util.ArrayList
+import java.math.BigDecimal // Add localizedPrice12 by Nyan
+import java.text.NumberFormat // Add localizedPrice12 by Nyan
+import java.util.Currency // Add localizedPrice12 by Nyan
+import java.util.Locale // Add localizedPrice12 by Nyan
 import com.android.billingclient.api.AcknowledgePurchaseParams
 import com.android.billingclient.api.BillingClient
 import com.android.billingclient.api.BillingClientStateListener
@@ -34,11 +39,6 @@ import com.facebook.react.modules.core.DeviceEventManagerModule.RCTDeviceEventEm
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
 import android.util.Log
-import java.util.ArrayList
-import java.math.BigDecimal // Add localizedPrice12 by Nyan
-import java.text.NumberFormat // Add localizedPrice12 by Nyan
-import java.util.Currency // Add localizedPrice12 by Nyan
-import java.util.Locale // Add localizedPrice12 by Nyan
 
 class RNIapModule(
     private val reactContext: ReactApplicationContext,

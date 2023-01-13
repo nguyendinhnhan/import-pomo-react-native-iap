@@ -1,5 +1,11 @@
 package com.dooboolab.RNIap
 
+import java.lang.NumberFormatException
+import java.math.BigDecimal // Add localizedPrice12 by Nyan
+import java.text.NumberFormat // Add localizedPrice12 by Nyan
+import java.util.Currency // Add localizedPrice12 by Nyan
+import java.util.Locale // Add localizedPrice12 by Nyan
+import android.util.Log
 import com.amazon.device.iap.PurchasingListener
 import com.amazon.device.iap.model.ProductDataResponse
 import com.amazon.device.iap.model.ProductType
@@ -14,12 +20,6 @@ import com.facebook.react.bridge.WritableMap
 import com.facebook.react.bridge.WritableNativeArray
 import com.facebook.react.bridge.WritableNativeMap
 import com.facebook.react.modules.core.DeviceEventManagerModule.RCTDeviceEventEmitter
-import java.lang.NumberFormatException
-import java.math.BigDecimal // Add localizedPrice12 by Nyan
-import java.text.NumberFormat // Add localizedPrice12 by Nyan
-import java.util.Currency // Add localizedPrice12 by Nyan
-import java.util.Locale // Add localizedPrice12 by Nyan
-import android.util.Log
 
 val ProductType.typeString: String
     get() = if (this == ProductType.ENTITLED || this == ProductType.CONSUMABLE) "inapp" else "subs"
