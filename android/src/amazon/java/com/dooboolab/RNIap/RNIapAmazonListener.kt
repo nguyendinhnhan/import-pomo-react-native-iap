@@ -1,5 +1,4 @@
 package com.dooboolab.RNIap
-
 import android.util.Log
 import com.amazon.device.iap.PurchasingListener
 import com.amazon.device.iap.model.ProductDataResponse
