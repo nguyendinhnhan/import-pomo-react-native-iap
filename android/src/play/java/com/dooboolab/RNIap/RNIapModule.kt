@@ -34,10 +34,12 @@ import com.facebook.react.modules.core.DeviceEventManagerModule.RCTDeviceEventEm
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
 import java.util.ArrayList
+// Begin Add localizedPrice12 by Nyan
 import java.math.BigDecimal
 import java.text.NumberFormat
 import java.util.Currency
 import java.util.Locale
+// End Add localizedPrice12 by Nyan
 
 class RNIapModule(
     private val reactContext: ReactApplicationContext,

@@ -16,10 +16,12 @@ import com.facebook.react.bridge.WritableNativeArray
 import com.facebook.react.bridge.WritableNativeMap
 import com.facebook.react.modules.core.DeviceEventManagerModule.RCTDeviceEventEmitter
 import java.lang.NumberFormatException
+// Begin Add localizedPrice12 by Nyan
 import java.math.BigDecimal
 import java.text.NumberFormat
 import java.util.Currency
 import java.util.Locale
+// End Add localizedPrice12 by Nyan
 
 val ProductType.typeString: String
     get() = if (this == ProductType.ENTITLED || this == ProductType.CONSUMABLE) "inapp" else "subs"
