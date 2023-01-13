@@ -280,7 +280,6 @@ class RNIapModule(
                                     pricingPhaseItem.priceAmountMicros.toString()
                                 )
                                 pricingPhase.putInt("recurrenceMode", pricingPhaseItem.recurrenceMode)
-
                                 // Begin Add localizedPrice12 by Nyan
                                 val priceAmount = BigDecimal.valueOf(pricingPhaseItem.priceAmountMicros)
                                 val localizedPrice12 = if (priceAmount.compareTo(BigDecimal.valueOf(0)) > 0) {
@@ -303,7 +302,6 @@ class RNIapModule(
                                 }
                                 pricingPhase.putString("localizedPrice12", localizedPrice12)
                                 // End Add localizedPrice12 by Nyan
-                                
                                 pricingPhasesList.pushMap(pricingPhase)
                             }
                             val pricingPhases = Arguments.createMap()
