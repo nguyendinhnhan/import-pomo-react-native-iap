@@ -30,7 +30,6 @@ import com.facebook.react.bridge.WritableArray
 import com.facebook.react.bridge.WritableMap
 import com.facebook.react.bridge.WritableNativeArray
 import com.facebook.react.bridge.WritableNativeMap
-import com.facebook.react.module.annotations.ReactModule
 import com.facebook.react.modules.core.DeviceEventManagerModule.RCTDeviceEventEmitter
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
@@ -280,7 +279,6 @@ class RNIapModule(
                                     pricingPhaseItem.priceAmountMicros.toString()
                                 )
                                 pricingPhase.putInt("recurrenceMode", pricingPhaseItem.recurrenceMode)
-
                                 // Begin Add localizedPrice12 by Nyan
                                 val priceAmount = BigDecimal.valueOf(pricingPhaseItem.priceAmountMicros)
                                 val localizedPrice12 = if (priceAmount.compareTo(BigDecimal.valueOf(0)) > 0) {
@@ -303,7 +301,6 @@ class RNIapModule(
                                 }
                                 pricingPhase.putString("localizedPrice12", localizedPrice12)
                                 // End Add localizedPrice12 by Nyan
-                                
                                 pricingPhasesList.pushMap(pricingPhase)
                             }
                             val pricingPhases = Arguments.createMap()

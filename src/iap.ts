@@ -10,7 +10,6 @@ import {
   offerSk2Map,
   ProductSk2,
   productSk2Map,
-  subscriptionSk2Map,
   transactionSk2ToPurchaseMap,
 } from './types/appleSk2';
 import {
