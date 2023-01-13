@@ -1,6 +1,5 @@
 package com.dooboolab.RNIap
 
-import android.util.Log
 import com.android.billingclient.api.AcknowledgePurchaseParams
 import com.android.billingclient.api.BillingClient
 import com.android.billingclient.api.BillingClientStateListener
@@ -30,10 +29,11 @@ import com.facebook.react.bridge.WritableArray
 import com.facebook.react.bridge.WritableMap
 import com.facebook.react.bridge.WritableNativeArray
 import com.facebook.react.bridge.WritableNativeMap
-import com.facebook.react.module.annotations.ReactModule
+// import com.facebook.react.module.annotations.ReactModule
 import com.facebook.react.modules.core.DeviceEventManagerModule.RCTDeviceEventEmitter
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
+import android.util.Log
 import java.util.ArrayList
 import java.math.BigDecimal // Add localizedPrice12 by Nyan
 import java.text.NumberFormat // Add localizedPrice12 by Nyan
