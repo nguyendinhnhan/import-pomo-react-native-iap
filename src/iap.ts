@@ -1,346 +1,821 @@
-import * as Amazon from './types/amazon';
-import * as Android from './types/android';
-import * as Apple from './types/apple';
+import {NativeModules, Platform} from 'react-native';
 
+import * as IapAmazon from './modules/amazon';
+import * as IapAndroid from './modules/android';
+import * as IapIos from './modules/ios';
+import * as IapIosSk2 from './modules/iosSk2';
+import {singleProductAndroidMap} from './types/android';
+import {offerToRecord} from './types/apple';
 import {
-  EmitterSubscription,
-  Linking,
-  NativeEventEmitter,
-  NativeModules,
-  Platform,
-} from 'react-native';
+  offerSk2Map,
+  ProductSk2,
+  productSk2Map,
+  subscriptionSk2Map,
+  transactionSk2ToPurchaseMap,
+} from './types/appleSk2';
 import {
-  IAPErrorCode,
-  InAppPurchase,
-  InstallSourceAndroid,
+  fillProductsWithAdditionalData,
+  getAndroidModule,
+  getAndroidModuleType,
+  getIosModule,
+  getNativeModule,
+  isAmazon,
+  isIosStorekit2,
+  storekit1Mode,
+  storekit2Mode,
+  storekitHybridMode,
+} from './internal';
+import {
   Product,
-  ProductCommon,
   ProductPurchase,
-  ProrationModesAndroid,
-  PurchaseError,
+  ProductType,
+  Purchase,
   PurchaseResult,
   PurchaseStateAndroid,
+  RequestPurchase,
+  RequestSubscription,
   Subscription,
+  SubscriptionAmazon,
+  SubscriptionAndroid,
+  SubscriptionIOS,
+  SubscriptionPlatform,
   SubscriptionPurchase,
 } from './types';
 
-const {RNIapIos, RNIapModule, RNIapAmazonModule} = NativeModules;
+export {IapAndroid, IapAmazon, IapIos, IapIosSk2, isIosStorekit2};
 
-const ANDROID_ITEM_TYPE_SUBSCRIPTION = 'subs';
-const ANDROID_ITEM_TYPE_IAP = 'inapp';
+const {RNIapIos, RNIapIosSk2, RNIapModule, RNIapAmazonModule} = NativeModules;
+const ANDROID_ITEM_TYPE_SUBSCRIPTION = ProductType.subs;
+const ANDROID_ITEM_TYPE_IAP = ProductType.inapp;
 
-export const getInstallSourceAndroid = (): InstallSourceAndroid => {
-  return RNIapModule
-    ? InstallSourceAndroid.GOOGLE_PLAY
-    : InstallSourceAndroid.AMAZON;
-};
+/**
+ * STOREKIT1_MODE: Will not enable Storekit 2 even if the device supports it. Thigs will work as before,
+ * minimum changes required in the migration guide (default)
+ * HYBRID_MODE: Will enable Storekit 2 for iOS devices > 15.0 but will fallback to Sk1 on older devices
+ * There are some edge cases that you need to handle in this case (described in migration guide). This mode
+ * is for developers that are migrating to Storekit 2 but want to keep supporting older versions.
+ * STOREKIT2_MODE: Will *only* enable Storekit 2. This disables Storekit 1. This is for apps that
+ * have already targeted a min version of 15 for their app.
+ */
+export type STOREKIT_OPTIONS =
+  | 'STOREKIT1_MODE'
+  | 'STOREKIT_HYBRID_MODE'
+  | 'STOREKIT2_MODE';
 
-const checkNativeAndroidAvailable = (): void => {
-  if (!RNIapModule && !RNIapAmazonModule) {
-    throw new Error(IAPErrorCode.E_IAP_NOT_AVAILABLE);
+export const setup = ({
+  storekitMode = 'STOREKIT1_MODE',
+}: {
+  storekitMode?: STOREKIT_OPTIONS;
+} = {}) => {
+  switch (storekitMode) {
+    case 'STOREKIT1_MODE':
+      storekit1Mode();
+      break;
+    case 'STOREKIT2_MODE':
+      storekit2Mode();
+      break;
+    case 'STOREKIT_HYBRID_MODE':
+      storekitHybridMode();
+      break;
+    default:
+      break;
   }
-};
-
-const getAndroidModule = (): typeof RNIapModule | typeof RNIapAmazonModule => {
-  checkNativeAndroidAvailable();
-
-  return RNIapModule ? RNIapModule : RNIapAmazonModule;
-};
-
-const checkNativeiOSAvailable = (): void => {
-  if (!RNIapIos) {
-    throw new Error(IAPErrorCode.E_IAP_NOT_AVAILABLE);
-  }
-};
-
-const getIosModule = (): typeof RNIapIos => {
-  checkNativeiOSAvailable();
-
-  return RNIapIos;
-};
-
-const getNativeModule = ():
-  | typeof RNIapModule
-  | typeof RNIapAmazonModule
-  | typeof RNIapIos => {
-  return RNIapModule
-    ? RNIapModule
-    : RNIapAmazonModule
-    ? RNIapAmazonModule
-    : RNIapIos;
 };
 
 /**
  * Init module for purchase flow. Required on Android. In ios it will check whether user canMakePayment.
- * @returns {Promise<boolean>}
+ * ## Usage
+
+```tsx
+import React, {useEffect} from 'react';
+import {View} from 'react-native';
+import {initConnection} from 'react-native-iap';
+
+const App = () => {
+  useEffect(() => {
+    void initConnection();
+  }, []);
+
+  return <View />;
+};
+```
  */
 export const initConnection = (): Promise<boolean> =>
   getNativeModule().initConnection();
 
 /**
- * End module for purchase flow.
+ * Disconnects from native SDK
+ * Usage
+ * ```tsx
+import React, {useEffect} from 'react';
+import {View} from 'react-native';
+import {endConnection} from 'react-native-iap';
+
+const App = () => {
+  useEffect(() => {
+    return () => {
+      void endConnection();
+    };
+  }, []);
+
+  return <View />;
+};
+```
  * @returns {Promise<void>}
  */
-export const endConnection = (): Promise<void> =>
+export const endConnection = (): Promise<boolean> =>
   getNativeModule().endConnection();
 
 /**
  * Consume all 'ghost' purchases (that is, pending payment that already failed but is still marked as pending in Play Store cache). Android only.
  * @returns {Promise<boolean>}
  */
-export const flushFailedPurchasesCachedAsPendingAndroid = (): Promise<
-  string[]
-> => getAndroidModule().flushFailedPurchasesCachedAsPending();
-
-/**
- * Fill products with additional data
- * @param {Array<ProductCommon>} products Products
- */
-const fillProductsAdditionalData = async (
-  products: Array<ProductCommon>,
-): Promise<Array<ProductCommon>> => {
-  // Amazon
-  if (RNIapAmazonModule) {
-    // On amazon we must get the user marketplace to detect the currency
-    const user = await RNIapAmazonModule.getUser();
-
-    const currencies = {
-      CA: 'CAD',
-      ES: 'EUR',
-      AU: 'AUD',
-      DE: 'EUR',
-      IN: 'INR',
-      US: 'USD',
-      JP: 'JPY',
-      GB: 'GBP',
-      IT: 'EUR',
-      BR: 'BRL',
-      FR: 'EUR',
-    };
-
-    const currency = currencies[user.userMarketplaceAmazon];
-
-    // Add currency to products
-    products.forEach((product) => {
-      if (currency) {
-        product.currency = currency;
-      }
-    });
-  }
-
-  return products;
-};
+export const flushFailedPurchasesCachedAsPendingAndroid =
+  (): Promise<boolean> =>
+    getAndroidModule().flushFailedPurchasesCachedAsPending();
 
 /**
  * Get a list of products (consumable and non-consumable items, but not subscriptions)
- * @param {string[]} skus The item skus
- * @returns {Promise<Product[]>}
+ ## Usage
+
+```ts
+import React, {useState} from 'react';
+import {Platform} from 'react-native';
+import {getProducts, Product} from 'react-native-iap';
+
+const skus = Platform.select({
+  ios: ['com.example.consumableIos'],
+  android: ['com.example.consumableAndroid'],
+});
+
+const App = () => {
+  const [products, setProducts] = useState<Product[]>([]);
+
+  const handleProducts = async () => {
+    const items = await getProducts({skus});
+
+    setProducts(items);
+  };
+
+  useEffect(() => {
+    void handleProducts();
+  }, []);
+
+  return (
+    <>
+      {products.map((product) => (
+        <Text key={product.productId}>{product.productId}</Text>
+      ))}
+    </>
+  );
+};
+```
+
+Just a few things to keep in mind:
+
+- You can get your products in `componentDidMount`, `useEffect` or another appropriate area of your app.
+- Since a user may start your app with a bad or no internet connection, preparing/getting the items more than once may be a good idea.
+- If the user has no IAPs available when the app starts first, you may want to check again when the user enters your IAP store.
+
  */
-export const getProducts = (skus: string[]): Promise<Array<Product>> =>
-  (
+export const getProducts = ({
+  skus,
+}: {
+  skus: string[];
+}): Promise<Array<Product>> => {
+  if (!skus?.length) {
+    return Promise.reject('"skus" is required');
+  }
+  return (
     Platform.select({
       ios: async () => {
-        const items = await getIosModule().getItems(skus);
-
-        return items.filter((item: Product) => skus.includes(item.productId));
+        let items: Product[];
+        if (isIosStorekit2()) {
+          items = ((await RNIapIosSk2.getItems(skus)) as ProductSk2[]).map(
+            productSk2Map,
+          );
+        } else {
+          items = (await RNIapIos.getItems(skus)) as Product[];
+        }
+        return items;
       },
       android: async () => {
-        const products = await getAndroidModule().getItemsByType(
-          ANDROID_ITEM_TYPE_IAP,
-          skus,
-        );
+        const products = (
+          await getAndroidModule().getItemsByType(ANDROID_ITEM_TYPE_IAP, skus)
+        ).map(singleProductAndroidMap);
 
-        return fillProductsAdditionalData(products);
+        return fillProductsWithAdditionalData(products);
       },
-    }) || Promise.resolve
+    }) || (() => Promise.reject(new Error('Unsupported Platform')))
   )();
+};
 
 /**
  * Get a list of subscriptions
- * @param {string[]} skus The item skus
- * @returns {Promise<Subscription[]>}
- */
-export const getSubscriptions = (skus: string[]): Promise<Subscription[]> =>
-  (
-    Platform.select({
-      ios: async () => {
-        const items = await getIosModule().getItems(skus);
+ * ## Usage
 
-        return items.filter((item: Subscription) =>
-          skus.includes(item.productId),
-        );
+```tsx
+import React, {useCallback} from 'react';
+import {View} from 'react-native';
+import {getSubscriptions} from 'react-native-iap';
+
+const App = () => {
+  const subscriptions = useCallback(
+    async () =>
+      await getSubscriptions({skus:['com.example.product1', 'com.example.product2']}),
+    [],
+  );
+
+  return <View />;
+};
+```
+
+ */
+export const getSubscriptions = ({
+  skus,
+}: {
+  skus: string[];
+}): Promise<Subscription[]> => {
+  if (!skus?.length) {
+    return Promise.reject('"skus" is required');
+  }
+  return (
+    Platform.select({
+      ios: async (): Promise<SubscriptionIOS[]> => {
+        let items: SubscriptionIOS[];
+        /* Add localizedPrice12 by Nyan
+        if (isIosStorekit2()) {
+          items = ((await RNIapIosSk2.getItems(skus)) as ProductSk2[]).map(
+            subscriptionSk2Map,
+          );
+        } else {
+          items = (await RNIapIos.getItems(skus)) as SubscriptionIOS[];
+        }
+        */
+        items = (await RNIapIos.getItems(skus)) as SubscriptionIOS[]; // Add localizedPrice12 by Nyan
+
+        return addSubscriptionPlatform(items, SubscriptionPlatform.ios);
       },
-      android: async () => {
-        const subscriptions = await getAndroidModule().getItemsByType(
+      android: async (): Promise<Subscription[]> => {
+        const androidPlatform = getAndroidModuleType();
+
+        let subscriptions = (await getAndroidModule().getItemsByType(
           ANDROID_ITEM_TYPE_SUBSCRIPTION,
           skus,
-        );
+        )) as SubscriptionAndroid[] | SubscriptionAmazon[];
 
-        return fillProductsAdditionalData(subscriptions);
+        switch (androidPlatform) {
+          case 'android': {
+            const castSubscriptions = subscriptions as SubscriptionAndroid[];
+            return addSubscriptionPlatform(
+              castSubscriptions,
+              SubscriptionPlatform.android,
+            );
+          }
+          case 'amazon':
+            let castSubscriptions = subscriptions as SubscriptionAmazon[];
+            castSubscriptions = await fillProductsWithAdditionalData(
+              castSubscriptions,
+            );
+            return addSubscriptionPlatform(
+              castSubscriptions,
+              SubscriptionPlatform.amazon,
+            );
+          case null:
+          default:
+            throw new Error(
+              `getSubscriptions received unknown platform ${androidPlatform}. Verify the logic in getAndroidModuleType`,
+            );
+        }
       },
-    }) || Promise.resolve
+    }) || (() => Promise.reject(new Error('Unsupported Platform')))
   )();
+};
+
+/**
+ * Adds an extra property to subscriptions so we can distinguish the platform
+ * we retrieved them on.
+ */
+const addSubscriptionPlatform = <T>(
+  subscriptions: T[],
+  platform: SubscriptionPlatform,
+): T[] => {
+  return subscriptions.map((subscription) => ({...subscription, platform}));
+};
 
 /**
  * Gets an inventory of purchases made by the user regardless of consumption status
- * @returns {Promise<(InAppPurchase | SubscriptionPurchase)[]>}
+ * ## Usage
+
+```tsx
+import React, {useCallback} from 'react';
+import {View} from 'react-native';
+import {getPurchaseHistory} from 'react-native-iap';
+
+const App = () => {
+  const history = useCallback(
+    async () =>
+      await getPurchaseHistory([
+        'com.example.product1',
+        'com.example.product2',
+      ]),
+    [],
+  );
+
+  return <View />;
+};
+```
+@param {alsoPublishToEventListener}:boolean. (IOS Sk2 only) When `true`, every element will also be pushed to the purchaseUpdated listener.
+Note that this is only for backaward compatiblity. It won't publish to transactionUpdated (Storekit2) Defaults to `false`
+@param {automaticallyFinishRestoredTransactions}:boolean. (IOS Sk1 only) When `true`, all the transactions that are returned are automatically
+finished. This means that if you call this method again you won't get the same result on the same device. On the other hand, if `false` you'd
+have to manually finish the returned transaction once you have delivered the content to your user.
+@param {onlyIncludeActiveItems}:boolean. (IOS Sk2 only). Defaults to false, meaning that it will return one transaction per item purchased. 
+@See https://developer.apple.com/documentation/storekit/transaction/3851204-currententitlements for details
  */
-export const getPurchaseHistory = (): Promise<
-  (InAppPurchase | SubscriptionPurchase)[]
-> =>
+export const getPurchaseHistory = ({
+  alsoPublishToEventListener = false,
+  automaticallyFinishRestoredTransactions = true,
+  onlyIncludeActiveItems = false,
+}: {
+  alsoPublishToEventListener?: boolean;
+  automaticallyFinishRestoredTransactions?: boolean;
+  onlyIncludeActiveItems?: boolean;
+} = {}): Promise<Purchase[]> =>
   (
     Platform.select({
       ios: async () => {
-        return getIosModule().getAvailableItems();
+        if (isIosStorekit2()) {
+          return Promise.resolve(
+            (
+              await RNIapIosSk2.getAvailableItems(
+                alsoPublishToEventListener,
+                onlyIncludeActiveItems,
+              )
+            ).map(transactionSk2ToPurchaseMap),
+          );
+        } else {
+          return RNIapIos.getAvailableItems(
+            automaticallyFinishRestoredTransactions,
+          );
+        }
       },
       android: async () => {
         if (RNIapAmazonModule) {
           return await RNIapAmazonModule.getAvailableItems();
         }
 
-        const products = await getAndroidModule().getPurchaseHistoryByType(
+        const products = await RNIapModule.getPurchaseHistoryByType(
           ANDROID_ITEM_TYPE_IAP,
         );
 
-        const subscriptions = await getAndroidModule().getPurchaseHistoryByType(
+        const subscriptions = await RNIapModule.getPurchaseHistoryByType(
           ANDROID_ITEM_TYPE_SUBSCRIPTION,
         );
 
         return products.concat(subscriptions);
       },
-    }) || Promise.resolve
+    }) || (() => Promise.resolve([]))
   )();
 
 /**
  * Get all purchases made by the user (either non-consumable, or haven't been consumed yet)
- * @returns {Promise<(InAppPurchase | SubscriptionPurchase)[]>}
+ * ## Usage
+
+```tsx
+import React, {useCallback} from 'react';
+import {View} from 'react-native';
+import {getAvailablePurchases} from 'react-native-iap';
+
+const App = () => {
+  const availablePurchases = useCallback(
+    async () => await getAvailablePurchases(),
+    [],
+  );
+
+  return <View />;
+};
+```
+
+## Restoring purchases
+
+You can use `getAvailablePurchases()` to do what's commonly understood as "restoring" purchases.
+
+:::note
+For debugging you may want to consume all items, you have then to iterate over the purchases returned by `getAvailablePurchases()`.
+:::
+
+:::warning
+Beware that if you consume an item without having recorded the purchase in your database the user may have paid for something without getting it delivered and you will have no way to recover the receipt to validate and restore their purchase.
+:::
+
+```tsx
+import React from 'react';
+import {Button} from 'react-native';
+import {getAvailablePurchases,finishTransaction} from 'react-native-iap';
+
+const App = () => {
+  handleRestore = async () => {
+    try {
+      const purchases = await getAvailablePurchases();
+      const newState = {premium: false, ads: true};
+      let titles = [];
+
+      await Promise.all(purchases.map(async purchase => {
+        switch (purchase.productId) {
+          case 'com.example.premium':
+            newState.premium = true;
+            titles.push('Premium Version');
+            break;
+
+          case 'com.example.no_ads':
+            newState.ads = false;
+            titles.push('No Ads');
+            break;
+
+          case 'com.example.coins100':
+            await finishTransaction({purchase});
+            CoinStore.addCoins(100);
+        }
+      })
+
+      Alert.alert(
+        'Restore Successful',
+        `You successfully restored the following purchases: ${titles.join(', ')}`,
+      );
+    } catch (error) {
+      console.warn(error);
+      Alert.alert(error.message);
+    }
+  };
+
+  return (
+    <Button title="Restore purchases" onPress={handleRestore} />
+  )
+};
+```
+@param {alsoPublishToEventListener}:boolean When `true`, every element will also be pushed to the purchaseUpdated listener.
+Note that this is only for backaward compatiblity. It won't publish to transactionUpdated (Storekit2) Defaults to `false`
+@param {onlyIncludeActiveItems}:boolean. (IOS Sk2 only). Defaults to true, meaning that it will return the transaction if suscription has not expired. 
+@See https://developer.apple.com/documentation/storekit/transaction/3851204-currententitlements for details
+ *
  */
-export const getAvailablePurchases = (): Promise<
-  (InAppPurchase | SubscriptionPurchase)[]
-> =>
+export const getAvailablePurchases = ({
+  alsoPublishToEventListener = false,
+  automaticallyFinishRestoredTransactions = false,
+  onlyIncludeActiveItems = true,
+}: {
+  alsoPublishToEventListener?: boolean;
+  automaticallyFinishRestoredTransactions?: boolean;
+  onlyIncludeActiveItems?: boolean;
+} = {}): Promise<Purchase[]> =>
   (
     Platform.select({
       ios: async () => {
-        return getIosModule().getAvailableItems();
+        if (isIosStorekit2()) {
+          return Promise.resolve(
+            (
+              await RNIapIosSk2.getAvailableItems(
+                alsoPublishToEventListener,
+                onlyIncludeActiveItems,
+              )
+            ).map(transactionSk2ToPurchaseMap),
+          );
+        } else {
+          return RNIapIos.getAvailableItems(
+            automaticallyFinishRestoredTransactions,
+          );
+        }
       },
       android: async () => {
         if (RNIapAmazonModule) {
           return await RNIapAmazonModule.getAvailableItems();
         }
 
-        const products = await getAndroidModule().getAvailableItemsByType(
+        const products = await RNIapModule.getAvailableItemsByType(
           ANDROID_ITEM_TYPE_IAP,
         );
 
-        const subscriptions = await getAndroidModule().getAvailableItemsByType(
+        const subscriptions = await RNIapModule.getAvailableItemsByType(
           ANDROID_ITEM_TYPE_SUBSCRIPTION,
         );
 
         return products.concat(subscriptions);
       },
-    }) || Promise.resolve
+    }) || (() => Promise.resolve([]))
   )();
 
 /**
  * Request a purchase for product. This will be received in `PurchaseUpdatedListener`.
- * @param {string} sku The product's sku/ID
- * @param {boolean} [andDangerouslyFinishTransactionAutomaticallyIOS] You should set this to false and call finishTransaction manually when you have delivered the purchased goods to the user. It defaults to true to provide backwards compatibility. Will default to false in version 4.0.0.
- * @param {string} [obfuscatedAccountIdAndroid] Specifies an optional obfuscated string that is uniquely associated with the user's account in your app.
- * @param {string} [obfuscatedProfileIdAndroid] Specifies an optional obfuscated string that is uniquely associated with the user's profile in your app.
- * @returns {Promise<InAppPurchase>}
+ * Request a purchase for a product (consumables or non-consumables).
+
+The response will be received through the `PurchaseUpdatedListener`.
+
+:::note
+`andDangerouslyFinishTransactionAutomatically` defaults to false. We recommend
+always keeping at false, and verifying the transaction receipts on the server-side.
+:::
+
+## Signature
+
+```ts
+requestPurchase(
+ The product's sku/ID
+  sku,
+
+
+   * You should set this to false and call finishTransaction manually when you have delivered the purchased goods to the user.
+   * @default false
+
+  andDangerouslyFinishTransactionAutomaticallyIOS = false,
+
+  /** Specifies an optional obfuscated string that is uniquely associated with the user's account in your app.
+  obfuscatedAccountIdAndroid,
+
+  Specifies an optional obfuscated string that is uniquely associated with the user's profile in your app.
+  obfuscatedProfileIdAndroid,
+
+   The purchaser's user ID
+  applicationUsername,
+): Promise<ProductPurchase>;
+```
+
+## Usage
+
+```tsx
+import React, {useCallback} from 'react';
+import {Button} from 'react-native';
+import {requestPurchase, Product, Sku, getProducts} from 'react-native-iap';
+
+const App = () => {
+  const products = useCallback(
+    async () => getProducts({skus:['com.example.product']}),
+    [],
+  );
+
+  const handlePurchase = async (sku: Sku) => {
+    await requestPurchase({sku});
+  };
+
+  return (
+    <>
+      {products.map((product) => (
+        <Button
+          key={product.productId}
+          title="Buy product"
+          onPress={() => handlePurchase(product.productId)}
+        />
+      ))}
+    </>
+  );
+};
+```
+
  */
+
 export const requestPurchase = (
-  sku: string,
-  andDangerouslyFinishTransactionAutomaticallyIOS: boolean = false,
-  obfuscatedAccountIdAndroid: string | undefined = undefined,
-  obfuscatedProfileIdAndroid: string | undefined = undefined,
-): Promise<InAppPurchase> =>
+  request: RequestPurchase,
+): Promise<ProductPurchase | void> =>
   (
     Platform.select({
       ios: async () => {
+        if (!('sku' in request)) {
+          throw new Error('sku is required for iOS purchase');
+        }
+
+        const {
+          sku,
+          andDangerouslyFinishTransactionAutomaticallyIOS = false,
+          appAccountToken,
+          quantity,
+          withOffer,
+        } = request;
+
         if (andDangerouslyFinishTransactionAutomaticallyIOS) {
-          // eslint-disable-next-line no-console
           console.warn(
-            // eslint-disable-next-line max-len
             'You are dangerously allowing react-native-iap to finish your transaction automatically. You should set andDangerouslyFinishTransactionAutomatically to false when calling requestPurchase and call finishTransaction manually when you have delivered the purchased goods to the user. It defaults to true to provide backwards compatibility. Will default to false in version 4.0.0.',
           );
         }
+        if (isIosStorekit2()) {
+          const offer = offerSk2Map(withOffer);
 
-        return getIosModule().buyProduct(
-          sku,
-          andDangerouslyFinishTransactionAutomaticallyIOS,
-        );
+          const purchase = transactionSk2ToPurchaseMap(
+            await RNIapIosSk2.buyProduct(
+              sku,
+              andDangerouslyFinishTransactionAutomaticallyIOS,
+              appAccountToken,
+              quantity ?? -1,
+              offer,
+            ),
+          );
+          return Promise.resolve(purchase);
+        } else {
+          return RNIapIos.buyProduct(
+            sku,
+            andDangerouslyFinishTransactionAutomaticallyIOS,
+            appAccountToken,
+            quantity ?? -1,
+            offerToRecord(withOffer),
+          );
+        }
       },
       android: async () => {
-        return getAndroidModule().buyItemByType(
-          ANDROID_ITEM_TYPE_IAP,
-          sku,
-          null,
-          0,
-          obfuscatedAccountIdAndroid,
-          obfuscatedProfileIdAndroid,
-        );
+        if (isAmazon) {
+          if (!('sku' in request)) {
+            throw new Error('sku is required for Amazon purchase');
+          }
+          const {sku} = request;
+          return RNIapAmazonModule.buyItemByType(sku);
+        } else {
+          if (!('skus' in request) || !request.skus.length) {
+            throw new Error('skus is required for Android purchase');
+          }
+
+          const {
+            skus,
+            obfuscatedAccountIdAndroid,
+            obfuscatedProfileIdAndroid,
+            isOfferPersonalized,
+          } = request;
+          return getAndroidModule().buyItemByType(
+            ANDROID_ITEM_TYPE_IAP,
+            skus,
+            undefined,
+            -1,
+            obfuscatedAccountIdAndroid,
+            obfuscatedProfileIdAndroid,
+            [],
+            isOfferPersonalized ?? false,
+          );
+        }
       },
     }) || Promise.resolve
   )();
 
 /**
  * Request a purchase for product. This will be received in `PurchaseUpdatedListener`.
- * @param {string} [sku] The product's sku/ID
- * @param {boolean} [andDangerouslyFinishTransactionAutomaticallyIOS] You should set this to false and call finishTransaction manually when you have delivered the purchased goods to the user. It defaults to true to provide backwards compatibility. Will default to false in version 4.0.0.
- * @param {string} [purchaseTokenAndroid] purchaseToken that the user is upgrading or downgrading from (Android).
- * @param {ProrationModesAndroid} [prorationModeAndroid] UNKNOWN_SUBSCRIPTION_UPGRADE_DOWNGRADE_POLICY, IMMEDIATE_WITH_TIME_PRORATION, IMMEDIATE_AND_CHARGE_PRORATED_PRICE, IMMEDIATE_WITHOUT_PRORATION, DEFERRED
- * @param {string} [obfuscatedAccountIdAndroid] Specifies an optional obfuscated string that is uniquely associated with the user's account in your app.
- * @param {string} [obfuscatedProfileIdAndroid] Specifies an optional obfuscated string that is uniquely associated with the user's profile in your app.
- * @returns {Promise<SubscriptionPurchase | null>} Promise resolves to null when using proratioModesAndroid=DEFERRED, and to a SubscriptionPurchase otherwise
+ * Request a purchase for a subscription.
+
+The response will be received through the `PurchaseUpdatedListener`.
+
+:::note
+`andDangerouslyFinishTransactionAutomatically` defaults to false. We recommend
+always keeping at false, and verifying the transaction receipts on the server-side.
+:::
+
+## Signature
+
+```ts
+requestSubscription(
+  The product's sku/ID
+  sku,
+
+
+   * You should set this to false and call finishTransaction manually when you have delivered the purchased goods to the user.
+   * @default false
+
+  andDangerouslyFinishTransactionAutomaticallyIOS = false,
+
+   purchaseToken that the user is upgrading or downgrading from (Android).
+  purchaseTokenAndroid,
+
+  UNKNOWN_SUBSCRIPTION_UPGRADE_DOWNGRADE_POLICY, IMMEDIATE_WITH_TIME_PRORATION, IMMEDIATE_AND_CHARGE_PRORATED_PRICE, IMMEDIATE_WITHOUT_PRORATION, DEFERRED
+  prorationModeAndroid = -1,
+
+  /** Specifies an optional obfuscated string that is uniquely associated with the user's account in your app.
+  obfuscatedAccountIdAndroid,
+
+  Specifies an optional obfuscated string that is uniquely associated with the user's profile in your app.
+  obfuscatedProfileIdAndroid,
+
+  The purchaser's user ID
+  applicationUsername,
+): Promise<SubscriptionPurchase>
+```
+
+## Usage
+
+```tsx
+import React, {useCallback} from 'react';
+import {Button} from 'react-native';
+import {
+  requestSubscription,
+  Product,
+  Sku,
+  getSubscriptions,
+} from 'react-native-iap';
+
+const App = () => {
+  const subscriptions = useCallback(
+    async () => getSubscriptions(['com.example.subscription']),
+    [],
+  );
+
+  const handlePurchase = async (sku: Sku) => {
+    await requestSubscription({sku});
+  };
+
+  return (
+    <>
+      {subscriptions.map((subscription) => (
+        <Button
+          key={subscription.productId}
+          title="Buy subscription"
+          onPress={() => handlePurchase(subscription.productId)}
+        />
+      ))}
+    </>
+  );
+};
+```
  */
 export const requestSubscription = (
-  sku: string,
-  andDangerouslyFinishTransactionAutomaticallyIOS: boolean = false,
-  purchaseTokenAndroid: string | undefined = undefined,
-  prorationModeAndroid: ProrationModesAndroid = -1,
-  obfuscatedAccountIdAndroid: string | undefined = undefined,
-  obfuscatedProfileIdAndroid: string | undefined = undefined,
-): Promise<SubscriptionPurchase | null> =>
+  request: RequestSubscription,
+): Promise<SubscriptionPurchase | null | void> =>
   (
     Platform.select({
       ios: async () => {
+        if (!('sku' in request)) {
+          throw new Error('sku is required for iOS subscriptions');
+        }
+
+        const {
+          sku,
+          andDangerouslyFinishTransactionAutomaticallyIOS = false,
+          appAccountToken,
+          quantity,
+          withOffer,
+        } = request;
+
         if (andDangerouslyFinishTransactionAutomaticallyIOS) {
-          // eslint-disable-next-line no-console
           console.warn(
-            // eslint-disable-next-line max-len
             'You are dangerously allowing react-native-iap to finish your transaction automatically. You should set andDangerouslyFinishTransactionAutomatically to false when calling requestPurchase and call finishTransaction manually when you have delivered the purchased goods to the user. It defaults to true to provide backwards compatibility. Will default to false in version 4.0.0.',
           );
         }
 
-        return getIosModule().buyProduct(
-          sku,
-          andDangerouslyFinishTransactionAutomaticallyIOS,
-        );
+        if (isIosStorekit2()) {
+          const offer = offerSk2Map(withOffer);
+
+          const purchase = transactionSk2ToPurchaseMap(
+            await RNIapIosSk2.buyProduct(
+              sku,
+              andDangerouslyFinishTransactionAutomaticallyIOS,
+              appAccountToken,
+              quantity ?? -1,
+              offer,
+            ),
+          );
+          return Promise.resolve(purchase);
+        } else {
+          return RNIapIos.buyProduct(
+            sku,
+            andDangerouslyFinishTransactionAutomaticallyIOS,
+            appAccountToken,
+            quantity ?? -1,
+            offerToRecord(withOffer),
+          );
+        }
       },
       android: async () => {
-        return getAndroidModule().buyItemByType(
-          ANDROID_ITEM_TYPE_SUBSCRIPTION,
-          sku,
-          purchaseTokenAndroid,
-          prorationModeAndroid,
-          obfuscatedAccountIdAndroid,
-          obfuscatedProfileIdAndroid,
-        );
-      },
-    }) || Promise.resolve
-  )();
+        if (isAmazon) {
+          if (!('sku' in request)) {
+            throw new Error('sku is required for Amazon subscriptions');
+          }
+          const {sku} = request;
+          return RNIapAmazonModule.buyItemByType(sku);
+        } else {
+          if (
+            !('subscriptionOffers' in request) ||
+            request.subscriptionOffers.length === 0
+          ) {
+            throw new Error(
+              'subscriptionOffers are required for Google Play subscriptions',
+            );
+          }
 
-/**
- * Request a purchase for product. This will be received in `PurchaseUpdatedListener`.
- * @param {string} sku The product's sku/ID
- * @returns {Promise<void>}
- */
-export const requestPurchaseWithQuantityIOS = (
-  sku: string,
-  quantity: number,
-): Promise<InAppPurchase> =>
-  getIosModule().buyProductWithQuantityIOS(sku, quantity);
+          const {
+            subscriptionOffers,
+            purchaseTokenAndroid,
+            prorationModeAndroid = -1,
+            obfuscatedAccountIdAndroid,
+            obfuscatedProfileIdAndroid,
+            isOfferPersonalized,
+          } = request;
+
+          return RNIapModule.buyItemByType(
+            ANDROID_ITEM_TYPE_SUBSCRIPTION,
+            subscriptionOffers?.map((so) => so.sku),
+            purchaseTokenAndroid,
+            prorationModeAndroid,
+            obfuscatedAccountIdAndroid,
+            obfuscatedProfileIdAndroid,
+            subscriptionOffers?.map((so) => so.offerToken),
+            isOfferPersonalized ?? false,
+          );
+        }
+      },
+    }) || (() => Promise.resolve(null))
+  )();
 
 /**
  * Finish Transaction (both platforms)
@@ -349,23 +824,48 @@ export const requestPurchaseWithQuantityIOS = (
  *   Call this after you have persisted the purchased state to your server or local data in your app.
  *   `react-native-iap` will continue to deliver the purchase updated events with the successful purchase until you finish the transaction. **Even after the app has relaunched.**
  *   Android: it will consume purchase for consumables and acknowledge purchase for non-consumables.
- * @param {object} purchase The purchase that you would like to finish.
- * @param {boolean} isConsumable Checks if purchase is consumable. Has effect on `android`.
- * @param {string} developerPayloadAndroid Android developerPayload.
- * @returns {Promise<string | void> }
+ *
+```tsx
+import React from 'react';
+import {Button} from 'react-native';
+import {finishTransaction} from 'react-native-iap';
+
+const App = () => {
+  const handlePurchase = async () => {
+    // ... handle the purchase request
+
+    const result = finishTransaction({purchase});
+  };
+
+  return <Button title="Buy product" onPress={handlePurchase} />;
+};
+```
+ @returns {Promise<PurchaseResult | boolean>} Android: PurchaseResult, iOS: true
  */
-export const finishTransaction = (
-  purchase: InAppPurchase | ProductPurchase,
-  isConsumable?: boolean,
-  developerPayloadAndroid?: string,
-): Promise<string | void> => {
+export const finishTransaction = ({
+  purchase,
+  isConsumable,
+  developerPayloadAndroid,
+}: {
+  purchase: Purchase;
+  isConsumable?: boolean;
+  developerPayloadAndroid?: string;
+}): Promise<PurchaseResult | boolean> => {
   return (
     Platform.select({
       ios: async () => {
-        return getIosModule().finishTransaction(purchase.transactionId);
+        const transactionId = purchase.transactionId;
+
+        if (!transactionId) {
+          return Promise.reject(
+            new Error('transactionId required to finish iOS transaction'),
+          );
+        }
+        await getIosModule().finishTransaction(transactionId);
+        return Promise.resolve(true);
       },
       android: async () => {
-        if (purchase) {
+        if (purchase?.purchaseToken) {
           if (isConsumable) {
             return getAndroidModule().consumeProduct(
               purchase.purchaseToken,
@@ -381,295 +881,15 @@ export const finishTransaction = (
               developerPayloadAndroid,
             );
           } else {
-            throw new Error('purchase is not suitable to be purchased');
+            return Promise.reject(
+              new Error('purchase is not suitable to be purchased'),
+            );
           }
-        } else {
-          throw new Error('purchase is not assigned');
         }
+        return Promise.reject(
+          new Error('purchase is not suitable to be purchased'),
+        );
       },
-    }) || Promise.resolve
+    }) || (() => Promise.reject(new Error('Unsupported Platform')))
   )();
 };
-
-/**
- * Clear Transaction (iOS only)
- *   Finish remaining transactions. Related to issue #257 and #801
- *     link : https://github.com/dooboolab/react-native-iap/issues/257
- *            https://github.com/dooboolab/react-native-iap/issues/801
- * @returns {Promise<void>}
- */
-export const clearTransactionIOS = (): Promise<void> =>
-  getIosModule().clearTransaction();
-
-/**
- * Clear valid Products (iOS only)
- *   Remove all products which are validated by Apple server.
- * @returns {void}
- */
-export const clearProductsIOS = (): Promise<void> =>
-  getIosModule().clearProducts();
-
-/**
- * Acknowledge a product (on Android.) No-op on iOS.
- * @param {string} token The product's token (on Android)
- * @returns {Promise<PurchaseResult | void>}
- */
-export const acknowledgePurchaseAndroid = (
-  token: string,
-  developerPayload?: string,
-): Promise<PurchaseResult | void> => {
-  return getAndroidModule().acknowledgePurchase(token, developerPayload);
-};
-
-/**
- * Deep link to subscriptions screen on Android. No-op on iOS.
- * @param {string} sku The product's SKU (on Android)
- * @returns {Promise<void>}
- */
-export const deepLinkToSubscriptionsAndroid = async (
-  sku: string,
-): Promise<void> => {
-  checkNativeAndroidAvailable();
-
-  return Linking.openURL(
-    `https://play.google.com/store/account/subscriptions?package=${await RNIapModule.getPackageName()}&sku=${sku}`,
-  );
-};
-
-/**
- * Should Add Store Payment (iOS only)
- *   Indicates the the App Store purchase should continue from the app instead of the App Store.
- * @returns {Promise<Product | null>} promoted product
- */
-export const getPromotedProductIOS = (): Promise<Product | null> =>
-  getIosModule().promotedProduct();
-
-/**
- * Buy the currently selected promoted product (iOS only)
- *   Initiates the payment process for a promoted product. Should only be called in response to the `iap-promoted-product` event.
- * @returns {Promise<void>}
- */
-export const buyPromotedProductIOS = (): Promise<void> =>
-  getIosModule().buyPromotedProduct();
-
-const fetchJsonOrThrow = async (
-  url: string,
-  receiptBody: Record<string, unknown>,
-): Promise<Apple.ReceiptValidationResponse | false> => {
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(receiptBody),
-  });
-
-  if (!response.ok) {
-    throw Object.assign(new Error(response.statusText), {
-      statusCode: response.status,
-    });
-  }
-
-  return response.json();
-};
-
-const requestAgnosticReceiptValidationIos = async (
-  receiptBody: Record<string, unknown>,
-): Promise<Apple.ReceiptValidationResponse | false> => {
-  const response = await fetchJsonOrThrow(
-    'https://buy.itunes.apple.com/verifyReceipt',
-    receiptBody,
-  );
-
-  // Best practice is to check for test receipt and check sandbox instead
-  // https://developer.apple.com/documentation/appstorereceipts/verifyreceipt
-  if (
-    response &&
-    response.status === Apple.ReceiptValidationStatus.TEST_RECEIPT
-  ) {
-    const testResponse = await fetchJsonOrThrow(
-      'https://sandbox.itunes.apple.com/verifyReceipt',
-      receiptBody,
-    );
-
-    return testResponse;
-  }
-
-  return response;
-};
-
-/**
- * Buy products or subscriptions with offers (iOS only)
- *
- * Runs the payment process with some info you must fetch
- * from your server.
- * @param {string} sku The product identifier
- * @param {string} forUser  An user identifier on you system
- * @param {Apple.PaymentDiscount} withOffer The offer information
- * @param {string} withOffer.identifier The offer identifier
- * @param {string} withOffer.keyIdentifier Key identifier that it uses to generate the signature
- * @param {string} withOffer.nonce An UUID returned from the server
- * @param {string} withOffer.signature The actual signature returned from the server
- * @param {number} withOffer.timestamp The timestamp of the signature
- * @returns {Promise<void>}
- */
-export const requestPurchaseWithOfferIOS = (
-  sku: string,
-  forUser: string,
-  withOffer: Apple.PaymentDiscount,
-): Promise<void> => getIosModule().buyProductWithOffer(sku, forUser, withOffer);
-
-/**
- * Validate receipt for iOS.
- * @param {object} receiptBody the receipt body to send to apple server.
- * @param {boolean} isTest whether this is in test environment which is sandbox.
- * @returns {Promise<Apple.ReceiptValidationResponse | false>}
- */
-export const validateReceiptIos = async (
-  receiptBody: Record<string, unknown>,
-  isTest?: boolean,
-): Promise<Apple.ReceiptValidationResponse | false> => {
-  if (isTest == null) {
-    return await requestAgnosticReceiptValidationIos(receiptBody);
-  }
-
-  const url = isTest
-    ? 'https://sandbox.itunes.apple.com/verifyReceipt'
-    : 'https://buy.itunes.apple.com/verifyReceipt';
-
-  const response = await fetchJsonOrThrow(url, receiptBody);
-
-  return response;
-};
-
-/**
- * Validate receipt for Android. NOTE: This method is here for debugging purposes only. Including
- * your access token in the binary you ship to users is potentially dangerous.
- * Use server side validation instead for your production builds
- * @param {string} packageName package name of your app.
- * @param {string} productId product id for your in app product.
- * @param {string} productToken token for your purchase.
- * @param {string} accessToken accessToken from googleApis.
- * @param {boolean} isSub whether this is subscription or inapp. `true` for subscription.
- * @returns {Promise<object>}
- */
-export const validateReceiptAndroid = async (
-  packageName: string,
-  productId: string,
-  productToken: string,
-  accessToken: string,
-  isSub?: boolean,
-): Promise<Android.ReceiptType> => {
-  const type = isSub ? 'subscriptions' : 'products';
-
-  const url =
-    'https://androidpublisher.googleapis.com/androidpublisher/v3/applications' +
-    `/${packageName}/purchases/${type}/${productId}` +
-    `/tokens/${productToken}?access_token=${accessToken}`;
-
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  });
-
-  if (!response.ok) {
-    throw Object.assign(new Error(response.statusText), {
-      statusCode: response.status,
-    });
-  }
-
-  return response.json();
-};
-
-/**
- * Validate receipt for Amazon. NOTE: This method is here for debugging purposes only. Including
- * your developer secret in the binary you ship to users is potentially dangerous.
- * Use server side validation instead for your production builds
- * @param {string} developerSecret: from the Amazon developer console.
- * @param {string} userId who purchased the item.
- * @param {string} receiptId long obfuscated string returned when purchasing the item
- * @param {boolean} useSandbox Defaults to true, use sandbox environment or production.
- * @returns {Promise<object>}
- */
-export const validateReceiptAmazon = async (
-  developerSecret: string,
-  userId: string,
-  receiptId: string,
-  useSandbox: boolean = true,
-): Promise<Amazon.ReceiptType> => {
-  const sandBoxUrl = useSandbox ? 'sandbox/' : '';
-  const url = `https://appstore-sdk.amazon.com/${sandBoxUrl}version/1.0/verifyReceiptId/developer/${developerSecret}/user/${userId}/receiptId/${receiptId}`;
-
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  });
-
-  if (!response.ok) {
-    throw Object.assign(new Error(response.statusText), {
-      statusCode: response.status,
-    });
-  }
-
-  return response.json();
-};
-
-/**
- * Add IAP purchase event
- * @returns {callback(e: InAppPurchase | ProductPurchase)}
- */
-export const purchaseUpdatedListener = (
-  listener: (event: InAppPurchase | SubscriptionPurchase) => void,
-): EmitterSubscription => {
-  const myModuleEvt = new NativeEventEmitter(getNativeModule());
-
-  const emitterSubscription = myModuleEvt.addListener(
-    'purchase-updated',
-    listener,
-  );
-
-  if (Platform.OS === 'android') {
-    getAndroidModule().startListening();
-  }
-
-  return emitterSubscription;
-};
-
-/**
- * Add IAP purchase error event
- * @returns {callback(e: PurchaseError)}
- */
-export const purchaseErrorListener = (
-  listener: (errorEvent: PurchaseError) => void,
-): EmitterSubscription =>
-  new NativeEventEmitter(getNativeModule()).addListener(
-    'purchase-error',
-    listener,
-  );
-
-/**
- * Get the current receipt base64 encoded in IOS.
- * @param {forceRefresh?:boolean}
- * @returns {Promise<string>}
- */
-export const getReceiptIOS = async (forceRefresh?: boolean): Promise<string> =>
-  getIosModule().requestReceipt(forceRefresh ?? false);
-
-/**
- * Get the pending purchases in IOS.
- * @returns {Promise<ProductPurchase[]>}
- */
-export const getPendingPurchasesIOS = async (): Promise<ProductPurchase[]> =>
-  getIosModule().getPendingTransactions();
-
-/**
- * Launches a modal to register the redeem offer code in IOS.
- * @returns {Promise<null>}
- */
-export const presentCodeRedemptionSheetIOS = async (): Promise<null> =>
-  getIosModule().presentCodeRedemptionSheet();

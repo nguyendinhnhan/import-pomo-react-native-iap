@@ -1,32 +1,36 @@
 import React, {useContext, useEffect, useMemo, useState} from 'react';
-import {NativeEventEmitter, NativeModules} from 'react-native';
+
 import {
-  InAppPurchase,
+  promotedProductListener,
+  purchaseErrorListener,
+  purchaseUpdatedListener,
+  transactionListener,
+} from '../eventEmitter';
+import {IapIos, initConnection} from '../iap';
+import type {PurchaseError} from '../purchaseError';
+import type {
   Product,
+  ProductPurchase,
   Purchase,
-  PurchaseError,
   Subscription,
   SubscriptionPurchase,
 } from '../types';
-import {
-  getPromotedProductIOS,
-  initConnection,
-  purchaseErrorListener,
-  purchaseUpdatedListener,
-} from '../iap';
+import type {TransactionEvent, TransactionSk2} from '../types/appleSk2';
 
 type IAPContextType = {
   connected: boolean;
   products: Product[];
   promotedProductsIOS: Product[];
   subscriptions: Subscription[];
-  purchaseHistories: Purchase[];
+  purchaseHistory: Purchase[];
   availablePurchases: Purchase[];
   currentPurchase?: Purchase;
+  currentTransaction?: TransactionSk2;
   currentPurchaseError?: PurchaseError;
+  initConnectionError?: Error;
   setProducts: (products: Product[]) => void;
   setSubscriptions: (subscriptions: Subscription[]) => void;
-  setPurchaseHistories: (purchaseHistories: Purchase[]) => void;
+  setPurchaseHistory: (purchaseHistory: Purchase[]) => void;
   setAvailablePurchases: (availablePurchases: Purchase[]) => void;
   setCurrentPurchase: (currentPurchase: Purchase | undefined) => void;
   setCurrentPurchaseError: (
@@ -34,14 +38,12 @@ type IAPContextType = {
   ) => void;
 };
 
-const {RNIapIos} = NativeModules;
-const IAPEmitter = new NativeEventEmitter(RNIapIos);
-
 // @ts-ignore
 const IAPContext = React.createContext<IAPContextType>(null);
 
 export function useIAPContext(): IAPContextType {
   const ctx = useContext(IAPContext);
+
   if (!ctx) {
     throw new Error('You need wrap your app with withIAPContext HOC');
   }
@@ -51,22 +53,26 @@ export function useIAPContext(): IAPContextType {
 
 export function withIAPContext<T>(Component: React.ComponentType<T>) {
   return function WrapperComponent(props: T) {
-    const [connected, setConnected] = useState<boolean>(false);
+    const [connected, setConnected] = useState(false);
     const [products, setProducts] = useState<Product[]>([]);
 
     const [promotedProductsIOS, setPromotedProductsIOS] = useState<Product[]>(
       [],
     );
     const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
-    const [purchaseHistories, setPurchaseHistories] = useState<Purchase[]>([]);
+    const [purchaseHistory, setPurchaseHistory] = useState<Purchase[]>([]);
 
     const [availablePurchases, setAvailablePurchases] = useState<Purchase[]>(
       [],
     );
     const [currentPurchase, setCurrentPurchase] = useState<Purchase>();
+    const [currentTransaction, setCurrentTransaction] =
+      useState<TransactionSk2>();
 
     const [currentPurchaseError, setCurrentPurchaseError] =
       useState<PurchaseError>();
+
+    const [initConnectionError, setInitConnectionError] = useState<Error>();
 
     const context = useMemo(
       () => ({
@@ -74,13 +80,15 @@ export function withIAPContext<T>(Component: React.ComponentType<T>) {
         products,
         subscriptions,
         promotedProductsIOS,
-        purchaseHistories,
+        purchaseHistory,
         availablePurchases,
         currentPurchase,
+        currentTransaction,
         currentPurchaseError,
+        initConnectionError,
         setProducts,
         setSubscriptions,
-        setPurchaseHistories,
+        setPurchaseHistory,
         setAvailablePurchases,
         setCurrentPurchase,
         setCurrentPurchaseError,
@@ -90,13 +98,15 @@ export function withIAPContext<T>(Component: React.ComponentType<T>) {
         products,
         subscriptions,
         promotedProductsIOS,
-        purchaseHistories,
+        purchaseHistory,
         availablePurchases,
         currentPurchase,
+        currentTransaction,
         currentPurchaseError,
+        initConnectionError,
         setProducts,
         setSubscriptions,
-        setPurchaseHistories,
+        setPurchaseHistory,
         setAvailablePurchases,
         setCurrentPurchase,
         setCurrentPurchaseError,
@@ -104,7 +114,12 @@ export function withIAPContext<T>(Component: React.ComponentType<T>) {
     );
 
     useEffect(() => {
-      initConnection().then(setConnected);
+      initConnection()
+        .then((value) => {
+          setInitConnectionError(undefined);
+          setConnected(value);
+        })
+        .catch(setInitConnectionError);
     }, []);
 
     useEffect(() => {
@@ -113,9 +128,16 @@ export function withIAPContext<T>(Component: React.ComponentType<T>) {
       }
 
       const purchaseUpdateSubscription = purchaseUpdatedListener(
-        async (purchase: InAppPurchase | SubscriptionPurchase) => {
+        async (purchase: ProductPurchase | SubscriptionPurchase) => {
           setCurrentPurchaseError(undefined);
           setCurrentPurchase(purchase);
+        },
+      );
+
+      const transactionUpdateSubscription = transactionListener(
+        async (transactionOrError: TransactionEvent) => {
+          setCurrentPurchaseError(transactionOrError?.error);
+          setCurrentTransaction(transactionOrError?.transaction);
         },
       );
 
@@ -126,22 +148,20 @@ export function withIAPContext<T>(Component: React.ComponentType<T>) {
         },
       );
 
-      const promotedProductsSubscription = IAPEmitter.addListener(
-        'iap-promoted-product',
-        async () => {
-          const product = await getPromotedProductIOS();
+      const promotedProductSubscription = promotedProductListener(async () => {
+        const product = await IapIos.getPromotedProductIOS();
 
-          setPromotedProductsIOS((prevProducts) => [
-            ...prevProducts,
-            ...(product ? [product] : []),
-          ]);
-        },
-      );
+        setPromotedProductsIOS((prevProducts) => [
+          ...prevProducts,
+          ...(product ? [product] : []),
+        ]);
+      });
 
       return () => {
         purchaseUpdateSubscription.remove();
         purchaseErrorSubscription.remove();
-        promotedProductsSubscription.remove();
+        promotedProductSubscription?.remove();
+        transactionUpdateSubscription?.remove();
       };
     }, [connected]);
 

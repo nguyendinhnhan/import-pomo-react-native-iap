@@ -6,14 +6,16 @@
 
 - You can do this on iOS 12 or later (for earlier iOS versions, use [this URL](https://buy.itunes.apple.com/WebObjects/MZFinance.woa/wa/manageSubscriptions)):
 
-  ```javascript
+  ```ts
   Linking.openURL('https://apps.apple.com/account/subscriptions');
   ```
 
 - You can do this on Android:
 
-  ```javascript
-  Linking.openURL('https://play.google.com/store/account/subscriptions?package=YOUR_PACKAGE_NAME&sku=YOUR_PRODUCT_ID
+  ```ts
+  Linking.openURL(
+    'https://play.google.com/store/account/subscriptions?package=YOUR_PACKAGE_NAME&sku=YOUR_PRODUCT_ID',
+  );
   ```
 
   (change `YOUR_PACKAGE_NAME` and `YOUR_PRODUCT_ID`)
@@ -72,48 +74,33 @@
 ### How do I handle promoted products in iOS?
 
 - Offical doc is [here](https://developer.apple.com/app-store/promoting-in-app-purchases/).
-  Add the following to your `AppDelegate`. This will store the parameters and excecute the logic
 
-````swift
-import UIKit
-import StoreKit
+#### Native
 
-class AppDelegate: UIResponder, UIApplicationDelegate {
-                ....
-    // Attach an observer to the payment queue.
-    func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplicationLaunchOptionsKey: Any]?) -> Bool {
-        SKPaymentQueue.default().add(RNIapQueue.shared)
-        return true
-    }
+This is (as of version 8.6.0) handled automatically in the native code. No additional native setup is needed
 
-    // Called when the application is about to terminate.
-    func applicationWillTerminate(_ application: UIApplication) {
-        // Remove the observer.
-        SKPaymentQueue.default().remove(RNIapQueue.shared)
-    }
-                ....
-}```
-
+#### JavaScript
 
 Somewhere early in your app's lifecycle, add a listener for the `iap-promoted-product` event:
 
-  ```javascript
-  import { NativeModules, NativeEventEmitter } from 'react-native'
-  const { RNIapIos } = NativeModules;
-  const IAPEmitter = new NativeEventEmitter(RNIapIos);
+```ts
+import {NativeModules, NativeEventEmitter} from 'react-native';
+const {RNIapIos} = NativeModules;
+const RNIapEmitter = new NativeEventEmitter(RNIapIos);
 
-  IAPEmitter.addListener('iap-promoted-product', async () => {
-    // Check if there's a persisted promoted product
-    const productId = await RNIap.getPromotedProductIOS();
-    if (productId !== null) { // You may want to validate the product ID against your own SKUs
-      try {
-        await RNIap.buyPromotedProductIOS(); // This will trigger the App Store purchase process
-      } catch(error) {
-        console.warn(error);
-      }
+RNIapEmitter.addListener('iap-promoted-product', async () => {
+  // Check if there's a persisted promoted product
+  const productId = await RNIap.getPromotedProductIOS();
+  if (productId !== null) {
+    // You may want to validate the product ID against your own SKUs
+    try {
+      await RNIap.buyPromotedProductIOS(); // This will trigger the App Store purchase process
+    } catch (error) {
+      console.warn(error);
     }
-  });
-````
+  }
+});
+```
 
 Then call `initConnection` (see above)
 
@@ -125,13 +112,19 @@ Then call `initConnection` (see above)
   Please note that in development or TestFlight, it will **NOT** use FaceID/Touch
   to checkout because they are using the Sandbox environment.
 
-
 ### Get products has empty list
 
 Here are some resources you might get help out of.
 
 - For `iOS`, check if you’ve agreed on taxes
-https://github.com/dooboolab/react-native-iap/issues/1272#issuecomment-800131501. Also, you may try to add storekit.
+  https://github.com/dooboolab/react-native-iap/issues/1272#issuecomment-800131501. Also, you may try to add storekit.
 
 - For Android, hope you to check this one.
-https://github.com/dooboolab/react-native-iap/issues/124#issuecomment-386593185
+  https://github.com/dooboolab/react-native-iap/issues/124#issuecomment-386593185
+
+### Update listener called many times on iOS (Storekit 1)
+
+This is not what happens typically in production. This is a design flaw in the native API. Some developers opt to create a new account everytime. Some others filter out the duplicate transactions.
+
+What you're seeing with multiple process purchase calls is actually normal in the case of auto-renewing subscriptions. When you test in the sandbox those subscriptions renew very quickly (how fast depends on sub period) and you can often see several of those appear in the queue after an app restart. Also, if a purchase hasn't been successfully completed (which is likely given those exceptions) then they can remain in the queue and result in multiple calls to your ProcessPurchase on every app restart until the problem is resolved. **_Note_**
+This is not a problem caused by react-native-iap.
